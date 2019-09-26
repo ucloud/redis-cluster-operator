@@ -7,6 +7,12 @@ const (
 	Ephemeral       StorageType = "ephemeral"
 )
 
+const (
+	OperatorName      = "redis-cluster-operator"
+	LabelManagedByKey = "managed-by"
+	LabelNameKey      = DistributedRedisClusterKind
+)
+
 // RedisRole RedisCluster Node Role type
 type RedisRole string
 

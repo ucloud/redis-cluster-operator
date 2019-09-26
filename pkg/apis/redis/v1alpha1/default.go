@@ -11,21 +11,25 @@ const (
 	defaultRedisImage  = "redis:5.0.4-alpine"
 )
 
-func (d *DistributedRedisCluster) Validate() {
-	if d.Spec.MasterSize < minMasterSize {
-		d.Spec.MasterSize = minMasterSize
+func (in *DistributedRedisCluster) Validate() {
+	if in.Spec.MasterSize < minMasterSize {
+		in.Spec.MasterSize = minMasterSize
 	}
 
-	if d.Spec.ClusterReplicas < minClusterReplicas {
-		d.Spec.ClusterReplicas = minClusterReplicas
+	if in.Spec.ClusterReplicas < minClusterReplicas {
+		in.Spec.ClusterReplicas = minClusterReplicas
 	}
 
-	if d.Spec.Image == "" {
-		d.Spec.Image = defaultRedisImage
+	if in.Spec.Image == "" {
+		in.Spec.Image = defaultRedisImage
 	}
 
-	if d.Spec.Resources == nil || d.Spec.Resources.Size() == 0 {
-		d.Spec.Resources = defaultResource()
+	if in.Spec.ServiceName == "" {
+		in.Spec.ServiceName = in.Name
+	}
+
+	if in.Spec.Resources == nil || in.Spec.Resources.Size() == 0 {
+		in.Spec.Resources = defaultResource()
 	}
 }
 

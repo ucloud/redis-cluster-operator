@@ -13,10 +13,15 @@ const (
 )
 
 func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster) error {
+	cluster.Validate()
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	// step 1. apply statefulSet for cluster
-	if err := r.ensurer.EnsureRedisStatefulset(cluster, nil); err != nil {
+	labels := getLabels(cluster)
+	if err := r.ensurer.EnsureRedisStatefulset(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulset")
+	}
+	if err := r.ensurer.EnsureRedisHeadLessSvc(cluster, labels); err != nil {
+		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvc")
 	}
 
 	// step 2. wait for all redis node ready

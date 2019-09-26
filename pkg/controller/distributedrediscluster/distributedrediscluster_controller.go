@@ -116,6 +116,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	status := buildClusterStatus(err)
 	r.updateClusterIfNeed(instance, status)
 	if err != nil {
+		reqLogger.WithValues("err", err).Info("requeue")
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil

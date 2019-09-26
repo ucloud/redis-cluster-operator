@@ -3,11 +3,12 @@ package statefulsets
 import (
 	"fmt"
 
-	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 )
 
 const (
@@ -34,7 +35,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 			OwnerReferences: ownerReferences(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: name,
+			ServiceName: cluster.Spec.ServiceName,
 			Replicas:    &size,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -141,8 +142,13 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Image: cluster.Spec.Image,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "redis",
+				Name:          "client",
 				ContainerPort: 6379,
+				Protocol:      corev1.ProtocolTCP,
+			},
+			{
+				Name:          "gossip",
+				ContainerPort: 16379,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},

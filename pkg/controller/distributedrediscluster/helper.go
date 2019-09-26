@@ -10,7 +10,21 @@ import (
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
+
+var (
+	defaultLabels = map[string]string{
+		redisv1alpha1.LabelManagedByKey: redisv1alpha1.OperatorName,
+	}
+)
+
+func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string {
+	dynLabels := map[string]string{
+		redisv1alpha1.LabelNameKey: fmt.Sprintf("%s%c%s", cluster.Namespace, '_', cluster.Name),
+	}
+	return utils.MergeLabels(defaultLabels, dynLabels, cluster.Labels)
+}
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
 func newRedisAdmin(pods []corev1.Pod, cfg *config.Redis) (redisutil.IAdmin, error) {
