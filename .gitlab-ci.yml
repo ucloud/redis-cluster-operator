@@ -1,0 +1,17 @@
+variables:
+  IMAGE_NAME: $REPO/redis-cluster-operator
+
+stages:
+- BuildImage
+
+docker-image:
+  stage: BuildImage
+  tags:
+  - kun
+  image: $BUILD_IMAGE
+  script:
+  - IMAGE_TAG=$CI_COMMIT_SHA && if [[ -n "$CI_COMMIT_TAG" ]]; then IMAGE_TAG=$CI_COMMIT_TAG ; fi
+  - /kaniko/executor -c $CI_PROJECT_DIR -f Dockerfile -d $IMAGE_NAME:$IMAGE_TAG
+  only:
+  - master
+  - dev

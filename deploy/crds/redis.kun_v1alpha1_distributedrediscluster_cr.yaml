@@ -1,0 +1,9 @@
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  name: example-distributedrediscluster
+spec:
+  # Add fields here
+  masterSize: 3
+  ClusterReplicas: 1
+  serviceName: redis-nodes
