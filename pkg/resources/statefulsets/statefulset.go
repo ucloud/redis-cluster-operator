@@ -201,6 +201,9 @@ func volumeMounts() []corev1.VolumeMount {
 
 // Returns the REDIS_PASSWORD environment variable.
 func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) corev1.EnvVar {
+	if cluster.Spec.PasswordSecret == nil {
+		return corev1.EnvVar{}
+	}
 	secretName := cluster.Spec.PasswordSecret.Name
 
 	return corev1.EnvVar{

@@ -19,7 +19,7 @@ func SetClusterCreating(status *redisv1alpha1.DistributedRedisClusterStatus, rea
 	status.Reason = reason
 }
 
-func buildClusterStatus(err error) *redisv1alpha1.DistributedRedisClusterStatus{
+func buildClusterStatus(err error) *redisv1alpha1.DistributedRedisClusterStatus {
 	status := &redisv1alpha1.DistributedRedisClusterStatus{}
 	if err == nil {
 		status.Status = redisv1alpha1.ClusterStatusOK

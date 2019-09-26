@@ -21,7 +21,7 @@ const (
 )
 
 type customError struct {
-	errorType ErrorType
+	errorType     ErrorType
 	originalError error
 }
 
@@ -75,7 +75,7 @@ func Wrapf(err error, msg string, args ...interface{}) error {
 	wrappedError := errors.Wrapf(err, msg, args...)
 	if customErr, ok := err.(customError); ok {
 		return customError{
-			errorType: customErr.errorType,
+			errorType:     customErr.errorType,
 			originalError: wrappedError,
 		}
 	}
