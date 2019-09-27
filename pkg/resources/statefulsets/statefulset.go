@@ -127,7 +127,7 @@ func ClusterStatefulSetName(clusterName string) string {
 
 func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
 	args := []string{
-		"--cluster-enabled on",
+		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
 
