@@ -23,7 +23,7 @@ const (
 func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *appsv1.StatefulSet {
 	password := redisPassword(cluster)
 	volumes := redisVolumes(cluster)
-	name := statefulSetName(cluster.Name)
+	name := ClusterStatefulSetName(cluster.Name)
 	namespace := cluster.Namespace
 	spec := cluster.Spec
 	size := spec.MasterSize * spec.ClusterReplicas
@@ -121,11 +121,11 @@ func ownerReferences(cluster *redisv1alpha1.DistributedRedisCluster) []metav1.Ow
 	}
 }
 
-func statefulSetName(clusterName string) string {
-	return fmt.Sprintf("dredis-cluster-%s", clusterName)
+func ClusterStatefulSetName(clusterName string) string {
+	return fmt.Sprintf("drc-%s", clusterName)
 }
 
-func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password corev1.EnvVar) corev1.Container {
+func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
 	args := []string{
 		"--cluster-enabled on",
 		"--cluster-config-file /data/nodes.conf",
@@ -137,7 +137,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 
 	probeArg := "redis-cli -h $(hostname)"
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:  redisServerName,
 		Image: cluster.Spec.Image,
 		Ports: []corev1.ContainerPort{
@@ -155,9 +155,6 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		VolumeMounts: volumeMounts(),
 		Command:      cmd,
 		Args:         args,
-		Env: []corev1.EnvVar{
-			password,
-		},
 		LivenessProbe: &corev1.Probe{
 			InitialDelaySeconds: graceTime,
 			TimeoutSeconds:      5,
@@ -194,6 +191,12 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		//	},
 		//},
 	}
+
+	if password != nil {
+		container.Env = []corev1.EnvVar{*password}
+	}
+
+	return container
 }
 
 func volumeMounts() []corev1.VolumeMount {
@@ -206,13 +209,13 @@ func volumeMounts() []corev1.VolumeMount {
 }
 
 // Returns the REDIS_PASSWORD environment variable.
-func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) corev1.EnvVar {
+func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVar {
 	if cluster.Spec.PasswordSecret == nil {
-		return corev1.EnvVar{}
+		return &corev1.EnvVar{}
 	}
 	secretName := cluster.Spec.PasswordSecret.Name
 
-	return corev1.EnvVar{
+	return &corev1.EnvVar{
 		Name: "REDIS_PASSWORD",
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{

@@ -2,11 +2,13 @@ package manager
 
 import (
 	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 type ICheck interface {
@@ -39,7 +41,7 @@ func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisClu
 	if err != nil {
 		return err
 	}
-	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, cluster.Name)
+	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
 	if err != nil {
 		return err
 	}

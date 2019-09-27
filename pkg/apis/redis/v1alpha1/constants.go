@@ -10,7 +10,7 @@ const (
 const (
 	OperatorName      = "redis-cluster-operator"
 	LabelManagedByKey = "managed-by"
-	LabelNameKey      = DistributedRedisClusterKind
+	LabelNameKey      = "distributed-redis-cluster"
 )
 
 // RedisRole RedisCluster Node Role type

@@ -31,10 +31,11 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 }
 
 func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, cluster.Name)
+	name := statefulsets.ClusterStatefulSetName(cluster.Name)
+	_, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", cluster.Name).
-			Info("Creating a new statefulSet")
+		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
+			Info("creating a new statefulSet")
 		ss := statefulsets.NewStatefulSetForCR(cluster, labels)
 		return r.statefulSetClient.CreateStatefulSet(ss)
 	}
@@ -42,9 +43,9 @@ func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.Distr
 }
 
 func (r *realEnsureResource) EnsureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.svcClient.GetService(cluster.Namespace, cluster.Name)
+	_, err := r.svcClient.GetService(cluster.Namespace, cluster.Spec.ServiceName)
 	if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Name).
+		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
 			Info("creating a new headless service")
 		svc := services.NewHeadLessSvcForCR(cluster, labels)
 		return r.svcClient.CreateService(svc)

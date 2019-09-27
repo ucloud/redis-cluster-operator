@@ -5,6 +5,7 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 const (
@@ -30,7 +31,7 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 	}
 
 	// step 3. check if the cluster is empty, if it is empty, init the cluster
-	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(cluster.Namespace, cluster.Name)
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
 	if err != nil {
 		return Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
