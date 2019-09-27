@@ -28,7 +28,7 @@ func NewCheck(client client.Client) ICheck {
 }
 
 func (c *realCheck) init(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, cluster.Name)
+	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
 	if err != nil {
 		return err
 	}
@@ -41,15 +41,11 @@ func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisClu
 	if err != nil {
 		return err
 	}
-	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
-	if err != nil {
-		return err
-	}
 	expectNodeNum := cluster.Spec.MasterSize * cluster.Spec.ClusterReplicas
-	if expectNodeNum != *ss.Spec.Replicas {
+	if expectNodeNum != *c.clusterStatefulSet.Spec.Replicas {
 		return fmt.Errorf("number of redis pods is different from specification")
 	}
-	if expectNodeNum != ss.Status.ReadyReplicas {
+	if expectNodeNum != c.clusterStatefulSet.Status.ReadyReplicas {
 		return fmt.Errorf("redis pods are not all ready")
 	}
 
