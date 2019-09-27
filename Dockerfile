@@ -16,7 +16,7 @@ WORKDIR /src
 COPY go.mod ./ go.sum ./
 RUN go mod download
 
-COPY pkg ./ cmd ./
+COPY pkg ./ cmd ./ version ./
 
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${GOBIN}/${PROJECT_NAME} \
     -ldflags "-X ${REPO_PATH}/pkg/version.Version=${VERSION} -X ${REPO_PATH}/pkg/version.GitSHA=${GIT_SHA}" \

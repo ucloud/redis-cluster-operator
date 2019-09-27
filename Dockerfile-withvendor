@@ -12,6 +12,7 @@ ARG GIT_SHA=0000000
 
 COPY pkg /go/src/${REPO_PATH}/pkg
 COPY cmd /go/src/${REPO_PATH}/cmd
+COPY version /go/src/${REPO_PATH}/version
 COPY vendor /go/src/${REPO_PATH}/vendor
 
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=vendor go build -o ${GOBIN}/${PROJECT_NAME} \
