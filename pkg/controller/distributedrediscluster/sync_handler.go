@@ -1,10 +1,12 @@
 package distributedrediscluster
 
 import (
+	"net"
 	"time"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
@@ -41,29 +43,28 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 	}
 	defer admin.Close()
 
-	clusterInfos, err := admin.GetClusterInfos()
-	if err != nil {
-		return Redis.Wrap(err, "GetClusterInfos")
-	}
-	logger.Info(clusterInfos.GetNodes().String())
 	isEmpty, err := admin.ClusterManagerNodeIsEmpty()
 	if err != nil {
 		return Redis.Wrap(err, "ClusterManagerNodeIsEmpty")
 	}
 	if isEmpty {
+		clusterInfos, err := admin.GetClusterInfos()
+		if err != nil {
+			cerr := err.(redisutil.ClusterInfosError)
+			if !cerr.Inconsistent() {
+				return Redis.Wrap(err, "GetClusterInfos")
+			}
+		}
+		logger.Info(clusterInfos.GetNodes().String())
+
 		if err := makeCluster(cluster, clusterInfos); err != nil {
 			return NoType.Wrap(err, "makeCluster")
 		}
 		for _, nodeInfo := range clusterInfos.Infos {
 			if len(nodeInfo.Node.MasterReferent) == 0 {
-				err = admin.AddSlots(nodeInfo.Node.IP, nodeInfo.Node.Slots)
+				err = admin.AddSlots(net.JoinHostPort(nodeInfo.Node.IP, nodeInfo.Node.Port), nodeInfo.Node.Slots)
 				if err != nil {
 					return Redis.Wrap(err, "AddSlots")
-				}
-			} else {
-				err = admin.AttachSlaveToMaster(nodeInfo.Node, nodeInfo.Node.MasterReferent)
-				if err != nil {
-					return Redis.Wrap(err, "AttachSlaveToMaster")
 				}
 			}
 		}
@@ -77,6 +78,17 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 		err = admin.AttachNodeToCluster()
 		if err != nil {
 			return Redis.Wrap(err, "AttachNodeToCluster")
+		}
+
+		time.Sleep(3 * time.Second)
+
+		for _, nodeInfo := range clusterInfos.Infos {
+			if len(nodeInfo.Node.MasterReferent) != 0 {
+				err = admin.AttachSlaveToMaster(nodeInfo.Node, nodeInfo.Node.MasterReferent)
+				if err != nil {
+					return Redis.Wrap(err, "AttachSlaveToMaster")
+				}
+			}
 		}
 	}
 

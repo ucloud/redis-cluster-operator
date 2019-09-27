@@ -41,7 +41,7 @@ func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisClu
 	if err != nil {
 		return err
 	}
-	expectNodeNum := cluster.Spec.MasterSize * cluster.Spec.ClusterReplicas
+	expectNodeNum := cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)
 	if expectNodeNum != *c.clusterStatefulSet.Spec.Replicas {
 		return fmt.Errorf("number of redis pods is different from specification")
 	}

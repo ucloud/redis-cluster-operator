@@ -54,7 +54,7 @@ func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *r
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	mastersCount := int(cluster.Spec.MasterSize)
 	clusterReplicas := cluster.Spec.ClusterReplicas
-	expectPodNum := mastersCount * int(clusterReplicas)
+	expectPodNum := mastersCount * int(clusterReplicas + 1)
 
 	if len(clusterInfos.Infos) != expectPodNum {
 		return fmt.Errorf("node num different from expectation")

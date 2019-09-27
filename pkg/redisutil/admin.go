@@ -132,7 +132,7 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 		if nodeinfos.Node != nil && nodeinfos.Node.IPPort() == addr {
 			infos.Infos[addr] = nodeinfos
 		} else {
-			log.Info("bad node info retreived from ", addr)
+			log.Info("bad node info retrieved from ", addr)
 		}
 	}
 
@@ -201,7 +201,7 @@ func (a *Admin) ClusterManagerNodeIsEmpty() (bool, error) {
 }
 
 func (a *Admin) clusterKnowNodes(c IClient, addr string) (int, error) {
-	resp := c.Cmd("CLUSTER", "NODES")
+	resp := c.Cmd("CLUSTER", "INFO")
 	if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve cluster info"); err != nil {
 		return 0, err
 	}

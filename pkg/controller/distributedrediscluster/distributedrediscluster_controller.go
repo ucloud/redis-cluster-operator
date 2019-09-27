@@ -117,6 +117,10 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	r.updateClusterIfNeed(instance, status)
 	if err != nil {
 		reqLogger.WithValues("err", err).Info("requeue")
+		switch GetType(err) {
+		case Requeue:
+			return reconcile.Result{RequeueAfter: requeueAfter}, nil
+		}
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
