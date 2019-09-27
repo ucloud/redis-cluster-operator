@@ -29,6 +29,7 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/apis"
 	config2 "github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller"
+	"github.com/ucloud/redis-cluster-operator/version"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -43,6 +44,7 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+	log.Info(fmt.Sprintf("Version of operator: %s+%s", version.Version, version.GitSHA))
 }
 
 func main() {
