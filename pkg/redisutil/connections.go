@@ -70,6 +70,7 @@ type AdminConnections struct {
 	connectionTimeout time.Duration
 	commandsMapping   map[string]string
 	clientName        string
+	password          string
 }
 
 func init() {
@@ -92,6 +93,7 @@ func NewAdminConnections(addrs []string, options *AdminOptions) IAdminConnection
 			cnx.commandsMapping = buildCommandReplaceMapping(options.RenameCommandsFile)
 		}
 		cnx.clientName = options.ClientName
+		cnx.password = options.Password
 	}
 	cnx.AddAll(addrs)
 	return cnx
@@ -261,7 +263,7 @@ func (cnx *AdminConnections) handleError(addr string, err error) bool {
 }
 
 func (cnx *AdminConnections) connect(addr string) (IClient, error) {
-	c, err := NewClient(addr, cnx.connectionTimeout, cnx.commandsMapping)
+	c, err := NewClient(addr, cnx.password, cnx.connectionTimeout, cnx.commandsMapping)
 	if err != nil {
 		return nil, err
 	}

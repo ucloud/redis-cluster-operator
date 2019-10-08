@@ -47,13 +47,19 @@ type Client struct {
 }
 
 // NewClient build a client connection and connect to a redis address
-func NewClient(addr string, cnxTimeout time.Duration, commandsMapping map[string]string) (IClient, error) {
+func NewClient(addr, password string, cnxTimeout time.Duration, commandsMapping map[string]string) (IClient, error) {
 	var err error
 	c := &Client{
 		commandsMapping: commandsMapping,
 	}
 
 	c.client, err = redis.DialTimeout("tcp", addr, cnxTimeout)
+	if err != nil {
+		return c, err
+	}
+	if password != "" {
+		err = c.client.Cmd("AUTH", password).Err
+	}
 	return c, err
 }
 

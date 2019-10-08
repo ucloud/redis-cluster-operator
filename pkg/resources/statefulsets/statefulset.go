@@ -17,6 +17,8 @@ const (
 	hostnameTopologyKey    = "kubernetes.io/hostname"
 
 	graceTime = 30
+
+	passwordENV = "REDIS_PASSWORD"
 )
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
@@ -130,6 +132,10 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
+	if password != nil {
+		args = append(args, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
+			fmt.Sprintf("--masterauth '$(%s)'", passwordENV))
+	}
 
 	cmd := []string{
 		"redis-server",
@@ -216,7 +222,7 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVa
 	secretName := cluster.Spec.PasswordSecret.Name
 
 	return &corev1.EnvVar{
-		Name: "REDIS_PASSWORD",
+		Name: passwordENV,
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{

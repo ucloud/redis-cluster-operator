@@ -85,6 +85,7 @@ type AdminOptions struct {
 	ConnectionTimeout  time.Duration
 	ClientName         string
 	RenameCommandsFile string
+	Password           string
 }
 
 // Admin wraps redis cluster admin logic

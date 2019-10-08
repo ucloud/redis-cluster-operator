@@ -37,7 +37,12 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 	if err != nil {
 		return Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
-	admin, err := newRedisAdmin(redisClusterPods.Items, config.RedisConf())
+	password, err := getClusterPassword(r.client, cluster)
+	if err != nil {
+		return Kubernetes.Wrap(err, "getClusterPassword")
+	}
+
+	admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
 	if err != nil {
 		return Redis.Wrap(err, "newRedisAdmin")
 	}
