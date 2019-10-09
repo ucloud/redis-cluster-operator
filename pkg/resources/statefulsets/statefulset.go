@@ -66,7 +66,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 		ss.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
 			persistentClaim(cluster, labels),
 		}
-		if !spec.Storage.DeleteClaim {
+		if spec.Storage.DeleteClaim {
 			// set an owner reference so the persistent volumes are deleted when the cluster be deleted.
 			ss.Spec.VolumeClaimTemplates[0].OwnerReferences = ownerReferences(cluster)
 		}
@@ -105,8 +105,12 @@ func persistentClaim(cluster *redisv1alpha1.DistributedRedisCluster, labels map[
 			Labels: labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources:        *cluster.Spec.Storage.Size,
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: cluster.Spec.Storage.Size,
+				},
+			},
 			StorageClassName: &cluster.Spec.Storage.Class,
 			VolumeMode:       &mode,
 		},

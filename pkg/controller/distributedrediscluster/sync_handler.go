@@ -60,7 +60,7 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 				return Redis.Wrap(err, "GetClusterInfos")
 			}
 		}
-		logger.Info(clusterInfos.GetNodes().String())
+		logger.Info("cluster nodes", "info", clusterInfos.GetNodes().String())
 
 		if err := makeCluster(cluster, clusterInfos); err != nil {
 			return NoType.Wrap(err, "makeCluster")
