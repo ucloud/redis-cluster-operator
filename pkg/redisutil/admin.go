@@ -40,6 +40,8 @@ type IAdmin interface {
 	ClusterManagerNodeIsEmpty() (bool, error)
 	// SetConfigEpoch Assign a different config epoch to each node
 	SetConfigEpoch() error
+	// SetConfigIfNeed set redis config
+	SetConfigIfNeed(newConfig map[string]string) error
 	//// InitRedisCluster used to configure the first node of a cluster
 	//InitRedisCluster(addr string) error
 	//// GetClusterInfosSelected return the Nodes infos for all nodes selected in the cluster
@@ -293,5 +295,43 @@ func (a *Admin) AttachNodeToCluster() error {
 	a.Connections().Add(addr)
 
 	log.Info(fmt.Sprintf("node %s attached properly", addr))
+	return nil
+}
+
+func (a *Admin) getAllConfig(c IClient, addr string) (map[string]string, error) {
+	resp := c.Cmd("CONFIG", "GET", "*")
+	if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve config"); err != nil {
+		return nil, err
+	}
+
+	var raw map[string]string
+	var err error
+	raw, err = resp.Map()
+
+	if err != nil {
+		return nil, fmt.Errorf("wrong format from CONFIG GET *: %v", err)
+	}
+
+	return raw, nil
+}
+
+// SetConfigIfNeed set redis config
+func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
+	for addr, c := range a.Connections().GetAll() {
+		oldConfig, err := a.getAllConfig(c, addr)
+		if err != nil {
+			return err
+		}
+
+		for key, value := range newConfig {
+			if value != oldConfig[key] {
+				log.V(3).Info("CONFIG SET", key, value)
+				resp := c.Cmd("CONFIG", "SET", key, value)
+				if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve config"); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }

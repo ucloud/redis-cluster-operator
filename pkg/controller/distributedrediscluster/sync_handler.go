@@ -97,6 +97,10 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 		}
 	}
 
+	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
+		return Redis.Wrap(err, "SetConfigIfNeed")
+	}
+
 	return nil
 }
 
