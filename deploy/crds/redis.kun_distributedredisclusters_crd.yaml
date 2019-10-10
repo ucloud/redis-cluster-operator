@@ -9,6 +9,8 @@ spec:
     listKind: DistributedRedisClusterList
     plural: distributedredisclusters
     singular: distributedrediscluster
+    shortNames:
+    - drc
   scope: Namespaced
   additionalPrinterColumns:
   - JSONPath: .spec.masterSize
@@ -22,6 +24,16 @@ spec:
   - JSONPath: .metadata.creationTimestamp
     name: Age
     type: date
+  - JSONPath: .status.numberOfMaster
+    priority: 1
+    description: The current master number of redis cluster
+    name: CurrentMasters
+    type: integer
+  - JSONPath: .spec.image
+    priority: 1
+    description: The image of redis cluster
+    name: Images
+    type: string
   subresources:
     status: {}
   version: v1alpha1
