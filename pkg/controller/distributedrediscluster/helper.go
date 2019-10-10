@@ -1,11 +1,14 @@
 package distributedrediscluster
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
@@ -19,6 +22,8 @@ var (
 	}
 )
 
+const passwordKey = "password"
+
 func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string {
 	dynLabels := map[string]string{
 		redisv1alpha1.LabelNameKey: fmt.Sprintf("%s%c%s", cluster.Namespace, '_', cluster.Name),
@@ -26,8 +31,23 @@ func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string
 	return utils.MergeLabels(defaultLabels, dynLabels, cluster.Labels)
 }
 
+func getClusterPassword(client client.Client, cluster *redisv1alpha1.DistributedRedisCluster) (string, error) {
+	if cluster.Spec.PasswordSecret == nil {
+		return "", nil
+	}
+	secret := &corev1.Secret{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Name:      cluster.Spec.PasswordSecret.Name,
+		Namespace: cluster.Namespace,
+	}, secret)
+	if err != nil {
+		return "", err
+	}
+	return string(secret.Data[passwordKey]), nil
+}
+
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []corev1.Pod, cfg *config.Redis) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
@@ -45,6 +65,7 @@ func newRedisAdmin(pods []corev1.Pod, cfg *config.Redis) (redisutil.IAdmin, erro
 	adminConfig := redisutil.AdminOptions{
 		ConnectionTimeout:  time.Duration(cfg.DialTimeout) * time.Millisecond,
 		RenameCommandsFile: cfg.GetRenameCommandsFile(),
+		Password:           password,
 	}
 
 	return redisutil.NewAdmin(nodesAddrs, &adminConfig), nil
@@ -54,7 +75,7 @@ func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *r
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	mastersCount := int(cluster.Spec.MasterSize)
 	clusterReplicas := cluster.Spec.ClusterReplicas
-	expectPodNum := mastersCount * int(clusterReplicas + 1)
+	expectPodNum := mastersCount * int(clusterReplicas+1)
 
 	if len(clusterInfos.Infos) != expectPodNum {
 		return fmt.Errorf("node num different from expectation")

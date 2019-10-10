@@ -17,6 +17,8 @@ const (
 	hostnameTopologyKey    = "kubernetes.io/hostname"
 
 	graceTime = 30
+
+	passwordENV = "REDIS_PASSWORD"
 )
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
@@ -64,7 +66,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 		ss.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
 			persistentClaim(cluster, labels),
 		}
-		if !spec.Storage.DeleteClaim {
+		if spec.Storage.DeleteClaim {
 			// set an owner reference so the persistent volumes are deleted when the cluster be deleted.
 			ss.Spec.VolumeClaimTemplates[0].OwnerReferences = ownerReferences(cluster)
 		}
@@ -103,8 +105,12 @@ func persistentClaim(cluster *redisv1alpha1.DistributedRedisCluster, labels map[
 			Labels: labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources:        *cluster.Spec.Storage.Size,
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: cluster.Spec.Storage.Size,
+				},
+			},
 			StorageClassName: &cluster.Spec.Storage.Class,
 			VolumeMode:       &mode,
 		},
@@ -129,6 +135,10 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 	args := []string{
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
+	}
+	if password != nil {
+		args = append(args, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
+			fmt.Sprintf("--masterauth '$(%s)'", passwordENV))
 	}
 
 	cmd := []string{
@@ -211,12 +221,12 @@ func volumeMounts() []corev1.VolumeMount {
 // Returns the REDIS_PASSWORD environment variable.
 func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVar {
 	if cluster.Spec.PasswordSecret == nil {
-		return &corev1.EnvVar{}
+		return nil
 	}
 	secretName := cluster.Spec.PasswordSecret.Name
 
 	return &corev1.EnvVar{
-		Name: "REDIS_PASSWORD",
+		Name: passwordENV,
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
