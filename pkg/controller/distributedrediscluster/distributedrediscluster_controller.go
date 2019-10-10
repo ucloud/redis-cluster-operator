@@ -2,7 +2,6 @@ package distributedrediscluster
 
 import (
 	"context"
-	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -16,7 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 var log = logf.Log.WithName("controller_distributedrediscluster")
@@ -112,15 +115,43 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, err
 	}
 
-	err = r.sync(instance)
-	status := buildClusterStatus(err)
+	err = r.waitPodReady(instance)
+	if err != nil {
+		reqLogger.WithValues("err", err).Info("requeue")
+		new := instance.Status.DeepCopy()
+		SetClusterScaling(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
+		return reconcile.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(instance.Namespace, statefulsets.ClusterStatefulSetName(instance.Name))
+	if err != nil {
+		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
+	}
+	password, err := getClusterPassword(r.client, instance)
+	if err != nil {
+		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
+	}
+
+	admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
+	if err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
+	}
+	defer admin.Close()
+
+	clusterInfos, err := admin.GetClusterInfos()
+	if err != nil {
+		cerr := err.(redisutil.ClusterInfosError)
+		if !cerr.Inconsistent() {
+			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
+		}
+	}
+
+	err = r.sync(instance, clusterInfos, admin)
+	status := buildClusterStatus(err, clusterInfos, redisClusterPods.Items)
 	r.updateClusterIfNeed(instance, status)
 	if err != nil {
 		reqLogger.WithValues("err", err).Info("requeue")
-		switch GetType(err) {
-		case Requeue:
-			return reconcile.Result{RequeueAfter: requeueAfter}, nil
-		}
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil

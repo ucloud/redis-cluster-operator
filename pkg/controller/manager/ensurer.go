@@ -32,8 +32,12 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 
 func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	name := statefulsets.ClusterStatefulSetName(cluster.Name)
-	_, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
-	if err != nil && errors.IsNotFound(err) {
+	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
+	if err == nil {
+		if (cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)) != *ss.Spec.Replicas {
+			return r.statefulSetClient.UpdateStatefulSet(statefulsets.NewStatefulSetForCR(cluster, labels))
+		}
+	} else if err != nil && errors.IsNotFound(err) {
 		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
 			Info("creating a new statefulSet")
 		ss := statefulsets.NewStatefulSetForCR(cluster, labels)

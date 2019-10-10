@@ -60,7 +60,8 @@ type Node struct {
 	ImportingSlots  map[Slot]string
 	ServerStartTime time.Time
 
-	Pod *corev1.Pod
+	NodeName string
+	PodName  string
 }
 
 // Nodes represent a Node slice
@@ -90,7 +91,8 @@ func NewNode(id, ip string, pod *corev1.Pod) *Node {
 	node := NewDefaultNode()
 	node.ID = id
 	node.IP = ip
-	node.Pod = pod
+	node.PodName = pod.Name
+	node.NodeName = pod.Spec.NodeName
 
 	return node
 }
@@ -166,7 +168,7 @@ func (n *Node) ToAPINode() redisv1alpha1.RedisClusterNode {
 	apiNode := redisv1alpha1.RedisClusterNode{
 		ID:      n.ID,
 		IP:      n.IP,
-		PodName: n.Pod.Name,
+		PodName: n.PodName,
 		Role:    n.GetRole(),
 		Slots:   []string{},
 	}

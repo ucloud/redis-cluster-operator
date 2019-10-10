@@ -60,10 +60,7 @@ func (c *Cluster) GetNodeByIP(ip string) (*Node, error) {
 // if not present in the cluster return an error
 func (c *Cluster) GetNodeByPodName(name string) (*Node, error) {
 	findFunc := func(node *Node) bool {
-		if node.Pod == nil {
-			return false
-		}
-		if node.Pod.Name == name {
+		if node.PodName == name {
 			return true
 		}
 		return false

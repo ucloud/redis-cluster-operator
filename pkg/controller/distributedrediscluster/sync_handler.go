@@ -5,9 +5,7 @@ import (
 	"time"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
-	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
-	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 const (
@@ -15,9 +13,8 @@ const (
 	reconcileAfter = 30 * time.Second
 )
 
-func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster) error {
+func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.DistributedRedisCluster) error {
 	cluster.Validate()
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	// step 1. apply statefulSet for cluster
 	labels := getLabels(cluster)
 	if err := r.ensurer.EnsureRedisStatefulset(cluster, labels); err != nil {
@@ -31,35 +28,40 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 	if err := r.checker.CheckRedisNodeNum(cluster); err != nil {
 		return Requeue.Wrap(err, "CheckRedisNodeNum")
 	}
+	return nil
+}
 
+func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
+	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	// step 3. check if the cluster is empty, if it is empty, init the cluster
-	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
-	if err != nil {
-		return Kubernetes.Wrap(err, "GetStatefulSetPods")
-	}
-	password, err := getClusterPassword(r.client, cluster)
-	if err != nil {
-		return Kubernetes.Wrap(err, "getClusterPassword")
-	}
-
-	admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
-	if err != nil {
-		return Redis.Wrap(err, "newRedisAdmin")
-	}
-	defer admin.Close()
+	//redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
+	//if err != nil {
+	//	return Kubernetes.Wrap(err, "GetStatefulSetPods")
+	//}
+	//password, err := getClusterPassword(r.client, cluster)
+	//if err != nil {
+	//	return Kubernetes.Wrap(err, "getClusterPassword")
+	//}
+	//
+	//admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
+	//if err != nil {
+	//	return Redis.Wrap(err, "newRedisAdmin")
+	//}
+	//defer admin.Close()
+	//
+	//clusterInfos, err := admin.GetClusterInfos()
+	//if err != nil {
+	//	cerr := err.(redisutil.ClusterInfosError)
+	//	if !cerr.Inconsistent() {
+	//		return Redis.Wrap(err, "GetClusterInfos")
+	//	}
+	//}
 
 	isEmpty, err := admin.ClusterManagerNodeIsEmpty()
 	if err != nil {
 		return Redis.Wrap(err, "ClusterManagerNodeIsEmpty")
 	}
 	if isEmpty {
-		clusterInfos, err := admin.GetClusterInfos()
-		if err != nil {
-			cerr := err.(redisutil.ClusterInfosError)
-			if !cerr.Inconsistent() {
-				return Redis.Wrap(err, "GetClusterInfos")
-			}
-		}
 		logger.Info("cluster nodes", "info", clusterInfos.GetNodes().String())
 
 		if err := makeCluster(cluster, clusterInfos); err != nil {
