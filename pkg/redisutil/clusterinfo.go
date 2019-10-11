@@ -85,7 +85,7 @@ func DecodeNodeInfos(input *string, addr string) *NodeInfos {
 			node.ID = values[0]
 			//remove trailing port for cluster internal protocol
 			ipPort := strings.Split(values[1], "@")
-			if ip, port, err := net.SplitHostPort(ipPort[0]); err == nil {
+			if ip, port, err := splitHostPort(ipPort[0]); err == nil {
 				node.IP = ip
 				node.Port = port
 				if ip == "" {
@@ -203,4 +203,14 @@ func getConfigSignature(nodes Nodes) ConfigSignature {
 		}
 	}
 	return signature
+}
+
+func splitHostPort(address string) (string, string, error) {
+	i := strings.LastIndex(address, ":")
+	if i < 0 {
+		return "", "", fmt.Errorf("splitHostPort failed, invalid address %s", address)
+	}
+	host := address[:i]
+	port := address[i+1:]
+	return host, port, nil
 }
