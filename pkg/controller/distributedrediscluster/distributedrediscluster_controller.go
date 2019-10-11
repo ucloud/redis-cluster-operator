@@ -141,8 +141,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 
 	clusterInfos, err := admin.GetClusterInfos()
 	if err != nil {
-		cerr := err.(redisutil.ClusterInfosError)
-		if !cerr.Inconsistent() {
+		if clusterInfos.Status == redisutil.ClusterInfosPartial {
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}

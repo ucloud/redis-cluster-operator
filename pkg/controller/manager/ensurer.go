@@ -35,6 +35,8 @@ func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.Distr
 	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
 	if err == nil {
 		if (cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)) != *ss.Spec.Replicas {
+			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
+				Info("scaling statefulSet")
 			return r.statefulSetClient.UpdateStatefulSet(statefulsets.NewStatefulSetForCR(cluster, labels))
 		}
 	} else if err != nil && errors.IsNotFound(err) {
