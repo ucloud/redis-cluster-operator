@@ -3,14 +3,15 @@ package distributedrediscluster
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -58,18 +59,29 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to primary resource DistributedRedisCluster
-	err = c.Watch(&source.Kind{Type: &redisv1alpha1.DistributedRedisCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
+	pred := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Call UpdateFunc")
+			// Ignore updates to CR status in which case metadata.Generation does not change
+			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true")
+				return true
+			}
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
+			return true
+		},
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner DistributedRedisCluster
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &redisv1alpha1.DistributedRedisCluster{},
-	})
+	// Watch for changes to primary resource DistributedRedisCluster
+	err = c.Watch(&source.Kind{Type: &redisv1alpha1.DistributedRedisCluster{}}, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
 		return err
 	}
@@ -145,14 +157,20 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}
+	status := buildClusterStatus(clusterInfos, redisClusterPods.Items)
+	r.updateClusterIfNeed(instance, status)
 
 	err = r.sync(instance, clusterInfos, admin)
-	status := buildClusterStatus(err, clusterInfos, redisClusterPods.Items)
-	r.updateClusterIfNeed(instance, status)
 	if err != nil {
+		new := instance.Status.DeepCopy()
+		SetClusterFailed(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
 		reqLogger.WithValues("err", err).Info("requeue")
 		return reconcile.Result{}, err
 	}
+	new := instance.Status.DeepCopy()
+	SetClusterOK(new, "OK")
+	r.updateClusterIfNeed(instance, new)
 	return reconcile.Result{}, nil
 	//// Define a new Pod object
 	//pod := newPodForCR(instance)

@@ -30,15 +30,15 @@ func SetClusterScaling(status *redisv1alpha1.DistributedRedisClusterStatus, reas
 	status.Reason = reason
 }
 
-func buildClusterStatus(err error, clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod) *redisv1alpha1.DistributedRedisClusterStatus {
+func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod) *redisv1alpha1.DistributedRedisClusterStatus {
 	status := &redisv1alpha1.DistributedRedisClusterStatus{}
-	if err == nil {
-		status.Status = redisv1alpha1.ClusterStatusOK
-		status.Reason = "OK"
-	} else {
-		status.Status = redisv1alpha1.ClusterStatusKO
-		status.Reason = err.Error()
-	}
+	//if err == nil {
+	//	status.Status = redisv1alpha1.ClusterStatusOK
+	//	status.Reason = "OK"
+	//} else {
+	//	status.Status = redisv1alpha1.ClusterStatusKO
+	//	status.Reason = err.Error()
+	//}
 
 	nbMaster := int32(0)
 	nbSlaveByMaster := map[string]int{}

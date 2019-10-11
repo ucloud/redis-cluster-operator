@@ -1,12 +1,16 @@
 package redisutil
 
+import (
+	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+)
+
 // Cluster represents a Redis Cluster
 type Cluster struct {
 	Name      string
 	Namespace string
 	Nodes     map[string]*Node
-	//Status         redisv1alpha1.ClusterStatus
-	//NodesPlacement redisv1alpha1.NodesPlacementInfo
+	Status         redisv1alpha1.ClusterStatus
+	NodesPlacement redisv1alpha1.NodesPlacementInfo
 	ActionsInfo ClusterActionsInfo
 }
 

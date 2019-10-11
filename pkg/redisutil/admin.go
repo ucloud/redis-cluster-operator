@@ -59,9 +59,9 @@ type IAdmin interface {
 	//ForgetNode(id string) error
 	//// ForgetNodeByAddr execute the Redis command to force the cluster to forgot the the Node
 	//ForgetNodeByAddr(id string) error
-	//// SetSlots exect the redis command to set slots in a pipeline, provide
-	//// and empty nodeID if the set slots commands doesn't take a nodeID in parameter
-	//SetSlots(addr string, action string, slots []Slot, nodeID string) error
+	// SetSlots exect the redis command to set slots in a pipeline, provide
+	// and empty nodeID if the set slots commands doesn't take a nodeID in parameter
+	SetSlots(addr string, action string, slots []Slot, nodeID string) error
 	// AddSlots exect the redis command to add slots in a pipeline
 	AddSlots(addr string, slots []Slot) error
 	//// DelSlots exec the redis command to del slots in a pipeline
@@ -70,14 +70,14 @@ type IAdmin interface {
 	//GetKeysInSlot(addr string, slot Slot, batch int, limit bool) ([]string, error)
 	//// CountKeysInSlot exec the redis command to count the keys given slot on the node
 	//CountKeysInSlot(addr string, slot Slot) (int64, error)
-	//// MigrateKeys from addr to destination node. returns number of slot migrated. If replace is true, replace key on busy error
-	//MigrateKeys(addr string, dest *Node, slots []Slot, batch, timeout int, replace bool) (int, error)
+	// MigrateKeys from addr to destination node. returns number of slot migrated. If replace is true, replace key on busy error
+	MigrateKeys(addr string, dest *Node, slots []Slot, batch, timeout int, replace bool) (int, error)
 	//// FlushAndReset reset the cluster configuration of the node, the node is flushed in the same pipe to ensure reset works
 	//FlushAndReset(addr string, mode string) error
 	//// FlushAll flush all keys in cluster
 	//FlushAll()
-	//// GetHashMaxSlot get the max slot value
-	//GetHashMaxSlot() Slot
+	// GetHashMaxSlot get the max slot value
+	GetHashMaxSlot() Slot
 	////RebuildConnectionMap rebuild the connection map according to the given addresses
 	//RebuildConnectionMap(addrs []string, options *AdminOptions)
 }
@@ -257,6 +257,30 @@ func (a *Admin) AddSlots(addr string, slots []Slot) error {
 	return a.Connections().ValidateResp(resp, addr, "unable to run CLUSTER ADDSLOTS")
 }
 
+// SetSlots use to set SETSLOT command on several slots
+func (a *Admin) SetSlots(addr, action string, slots []Slot, nodeID string) error {
+	if len(slots) == 0 {
+		return nil
+	}
+	c, err := a.Connections().Get(addr)
+	if err != nil {
+		return err
+	}
+	for _, slot := range slots {
+		if nodeID == "" {
+			c.PipeAppend("CLUSTER", "SETSLOT", slot, action)
+		} else {
+			c.PipeAppend("CLUSTER", "SETSLOT", slot, action, nodeID)
+		}
+	}
+	if !a.Connections().ValidatePipeResp(c, addr, "Cannot SETSLOT") {
+		return fmt.Errorf("Error occured during CLUSTER SETSLOT %s", action)
+	}
+	c.PipeClear()
+
+	return nil
+}
+
 func (a *Admin) SetConfigEpoch() error {
 	configEpoch := 1
 	for addr, c := range a.Connections().GetAll() {
@@ -334,4 +358,58 @@ func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// GetHashMaxSlot get the max slot value
+func (a *Admin) GetHashMaxSlot() Slot {
+	return a.hashMaxSlots
+}
+
+
+// MigrateKeys use to migrate keys from slots to other slots. if replace is true, replace key on busy error
+// timeout is in milliseconds
+func (a *Admin) MigrateKeys(addr string, dest *Node, slots []Slot, batch int, timeout int, replace bool) (int, error) {
+	if len(slots) == 0 {
+		return 0, nil
+	}
+	keyCount := 0
+	c, err := a.Connections().Get(addr)
+	if err != nil {
+		return keyCount, err
+	}
+	timeoutStr := strconv.Itoa(timeout)
+	batchStr := strconv.Itoa(batch)
+
+	for _, slot := range slots {
+		for {
+			resp := c.Cmd("CLUSTER", "GETKEYSINSLOT", slot, batchStr)
+			if err := a.Connections().ValidateResp(resp, addr, "Unable to run command GETKEYSINSLOT"); err != nil {
+				return keyCount, err
+			}
+			keys, err := resp.List()
+			if err != nil {
+				log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
+				return keyCount, err
+			}
+
+			keyCount += len(keys)
+			if len(keys) == 0 {
+				break
+			}
+
+			var args []string
+			if replace {
+				args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "REPLACE", "KEYS"}, keys...)
+			} else {
+				args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "KEYS"}, keys...)
+			}
+
+			resp = c.Cmd("MIGRATE", args)
+			if err := a.Connections().ValidateResp(resp, addr, "Unable to run command MIGRATE"); err != nil {
+				return keyCount, err
+			}
+		}
+	}
+
+	return keyCount, nil
 }

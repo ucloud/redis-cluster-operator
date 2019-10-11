@@ -18,6 +18,8 @@ const (
 	Kubernetes
 	// Redis error
 	Redis
+	// Cluster
+	Cluster
 )
 
 type customError struct {

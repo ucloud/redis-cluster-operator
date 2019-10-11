@@ -44,3 +44,16 @@ const (
 	// ClusterStatusRollingUpdate ClusterStatus RollingUpdate
 	ClusterStatusRollingUpdate ClusterStatus = "RollingUpdate"
 )
+
+
+// NodesPlacementInfo Redis Nodes placement mode information
+type NodesPlacementInfo string
+
+const (
+	// NodesPlacementInfoBestEffort the cluster nodes placement is in best effort,
+	// it means you can have 2 masters (or more) on the same VM.
+	NodesPlacementInfoBestEffort NodesPlacementInfo = "BestEffort"
+	// NodesPlacementInfoOptimal the cluster nodes placement is optimal,
+	// it means on master by VM
+	NodesPlacementInfoOptimal NodesPlacementInfo = "Optimal"
+)

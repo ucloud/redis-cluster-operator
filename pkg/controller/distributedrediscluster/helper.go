@@ -119,40 +119,27 @@ func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *r
 	return nil
 }
 
-//func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, pods []corev1.Pod) (*redisutil.Cluster, error) {
-//	redisCluster := redisutil.NewCluster(cluster.Name, cluster.Namespace)
-//	mastersCount := int(cluster.Spec.MasterSize)
-//	clusterReplicas := cluster.Spec.ClusterReplicas
-//	expectPodNum := mastersCount * int(clusterReplicas)
-//
-//	if len(pods) != expectPodNum {
-//		return nil, fmt.Errorf("pod num different from expectation")
-//	}
-//
-//	log.Info(fmt.Sprintf(">>> Performing hash slots allocation on %d nodes...", len(pods)))
-//
-//	slotsPerNode := redisutil.DefaultHashMaxSlots / mastersCount
-//	first := 0
-//	cursor := 0
-//
-//	for i := 0; i < mastersCount; i++ {
-//		node := redisutil.NewNode(pods[i].Name, pods[i].Status.PodIP, &pods[i])
-//		node.Role = redisutil.RedisMasterRole
-//		last := cursor + slotsPerNode - 1
-//		if last > redisutil.DefaultHashMaxSlots+1 || i == mastersCount-1 {
-//			last = redisutil.DefaultHashMaxSlots
-//		}
-//		log.Info(fmt.Sprintf("Master[%d] -> Slots %d - %d", i, first, last))
-//		node.Slots = redisutil.BuildSlotSlice(redisutil.Slot(first), redisutil.Slot(last))
-//		first = last + 1
-//		cursor += slotsPerNode
-//
-//		redisCluster.AddNode(node)
-//	}
-//
-//	for i := mastersCount - 1; i < expectPodNum; i++ {
-//
-//	}
-//
-//	return redisCluster, nil
-//}
+func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.DistributedRedisCluster) (*redisutil.Cluster, redisutil.Nodes, error) {
+	// now we can trigger the rebalance
+	nodes := infos.GetNodes()
+
+	// build redis cluster vision
+	rCluster := &redisutil.Cluster{
+		Name:      cluster.Name,
+		Namespace: cluster.Namespace,
+		Nodes:     make(map[string]*redisutil.Node),
+	}
+
+	for _, node := range nodes {
+		rCluster.Nodes[node.ID] = node
+	}
+
+	for _, node := range cluster.Status.Nodes {
+		if rNode, ok := rCluster.Nodes[node.ID]; ok {
+			rNode.PodName = node.PodName
+			rNode.NodeName = node.NodeName
+		}
+	}
+
+	return rCluster, nodes, nil
+}
