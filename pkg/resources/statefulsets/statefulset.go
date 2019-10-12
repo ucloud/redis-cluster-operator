@@ -53,6 +53,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 					Affinity:        getAffinity(spec.Affinity, labels),
 					Tolerations:     spec.ToleRations,
 					SecurityContext: spec.SecurityContext,
+					NodeSelector:    cluster.Spec.NodeSelector,
 					Containers: []corev1.Container{
 						redisServerContainer(cluster, password),
 					},
