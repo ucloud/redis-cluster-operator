@@ -181,7 +181,7 @@ func (cnx *AdminConnections) Update(addr string) (IClient, error) {
 	if err == nil && c != nil {
 		cnx.clients[addr] = c
 	} else {
-		log.V(3).Info(fmt.Sprintf("cannot connect to %s ", addr))
+		log.Info(fmt.Sprintf("cannot connect to %s ", addr))
 	}
 	return c, err
 }

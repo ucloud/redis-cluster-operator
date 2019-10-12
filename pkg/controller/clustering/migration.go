@@ -77,7 +77,7 @@ func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin
 			log.V(6).Info("2) Send SETSLOT MIGRATION command target:", nodesInfo.From.ID, " destination-node:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err = admin.SetSlots(nodesInfo.From.IPPort(), "MIGRATING", slots, nodesInfo.To.ID)
 			if err != nil {
-				log.Error(err,"error during MIGRATING")
+				log.Error(err, "error during MIGRATING")
 				return err
 			}
 

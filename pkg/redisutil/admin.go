@@ -48,7 +48,7 @@ type IAdmin interface {
 	//GetClusterInfosSelected(addrs []string) (*ClusterInfos, error)
 	// AttachNodeToCluster command use to connect a Node to the cluster
 	// the connection will be done on a random node part of the connection pool
-	AttachNodeToCluster() error
+	AttachNodeToCluster(addr string) error
 	// AttachSlaveToMaster attach a slave to a master node
 	AttachSlaveToMaster(slave *Node, masterID string) error
 	// DetachSlave dettach a slave to its master
@@ -294,22 +294,23 @@ func (a *Admin) SetConfigEpoch() error {
 }
 
 // AttachNodeToCluster command use to connect a Node to the cluster
-func (a *Admin) AttachNodeToCluster() error {
+func (a *Admin) AttachNodeToCluster(addr string) error {
+	ip, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+
+	log.V(3).Info("AttachNodeToCluster", "ip", ip, "port", port, "addr", addr)
+
 	all := a.Connections().GetAll()
 	if len(all) == 0 {
 		return fmt.Errorf("no connection for other redis-node found")
 	}
-	ip, port, addr := "", "", ""
-	var err error
 	for cAddr, c := range a.Connections().GetAll() {
-		if ip == "" {
-			ip, port, err = net.SplitHostPort(cAddr)
-			if err != nil {
-				return err
-			}
-			addr = cAddr
+		if cAddr == addr {
 			continue
 		}
+		log.V(3).Info("CLUSTER MEET", "addr", cAddr)
 		resp := c.Cmd("CLUSTER", "MEET", ip, port)
 		if err = a.Connections().ValidateResp(resp, addr, "cannot attach node to cluster"); err != nil {
 			return err
@@ -364,7 +365,6 @@ func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 func (a *Admin) GetHashMaxSlot() Slot {
 	return a.hashMaxSlots
 }
-
 
 // MigrateKeys use to migrate keys from slots to other slots. if replace is true, replace key on busy error
 // timeout is in milliseconds

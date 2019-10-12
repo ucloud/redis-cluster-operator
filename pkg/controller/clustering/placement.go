@@ -46,11 +46,11 @@ func PlaceMasters(cluster *redisutil.Cluster, currentMaster redisutil.Nodes, all
 			}
 		}
 		if bestEffort && !isProgress {
-			log.Error(nil, "Nothing appends since last loop, it means no more master available")
+			log.Error(nil, "nothing appends since last loop, it means no more master available")
 			break
 		}
 		bestEffort = true
-		log.Info("the Pod are not spread enough on VMs to have only one Master by VM.")
+		log.Info("the pod are not spread enough on VMs to have only one master by VM.")
 	}
 	log.Info(fmt.Sprintf("- bestEffort %v", bestEffort))
 	for _, node := range selection {

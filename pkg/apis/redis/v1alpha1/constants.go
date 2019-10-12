@@ -45,7 +45,6 @@ const (
 	ClusterStatusRollingUpdate ClusterStatus = "RollingUpdate"
 )
 
-
 // NodesPlacementInfo Redis Nodes placement mode information
 type NodesPlacementInfo string
 

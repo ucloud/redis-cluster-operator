@@ -28,7 +28,35 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.D
 	if err := r.checker.CheckRedisNodeNum(cluster); err != nil {
 		return Requeue.Wrap(err, "CheckRedisNodeNum")
 	}
+
 	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
+	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
+	logger.Info(">>> Assign a different config epoch to each node")
+	err := admin.SetConfigEpoch()
+	if err != nil {
+		return Redis.Wrap(err, "SetConfigEpoch")
+	}
+	var firstNode *redisutil.Node
+	for _, nodeInfo := range clusterInfos.Infos {
+		firstNode = nodeInfo.Node
+		break
+	}
+	logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
+	err = admin.AttachNodeToCluster(firstNode.IPPort())
+	if err != nil {
+		return Redis.Wrap(err, "AttachNodeToCluster")
+	}
+	// Give one second for the join to start, in order to avoid that
+	// waiting for cluster join will find all the nodes agree about
+	// the config as they are still empty with unassigned slots.
+	time.Sleep(1 * time.Second)
+	_, err = admin.GetClusterInfos()
+	if err == nil {
+		return Requeue.Wrap(err, "wait for cluster join")
+	}
 }
 
 func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
@@ -44,8 +72,12 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 		if err := makeCluster(cluster, clusterInfos); err != nil {
 			return NoType.Wrap(err, "makeCluster")
 		}
+		var firstNode *redisutil.Node
 		for _, nodeInfo := range clusterInfos.Infos {
 			if len(nodeInfo.Node.MasterReferent) == 0 {
+				if firstNode == nil {
+					firstNode = nodeInfo.Node
+				}
 				err = admin.AddSlots(net.JoinHostPort(nodeInfo.Node.IP, nodeInfo.Node.Port), nodeInfo.Node.Slots)
 				if err != nil {
 					return Redis.Wrap(err, "AddSlots")
@@ -59,7 +91,7 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 			return Redis.Wrap(err, "SetConfigEpoch")
 		}
 		logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
-		err = admin.AttachNodeToCluster()
+		err = admin.AttachNodeToCluster(firstNode.IPPort())
 		if err != nil {
 			return Redis.Wrap(err, "AttachNodeToCluster")
 		}
@@ -67,7 +99,7 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 		time.Sleep(1 * time.Second)
 		for {
 			_, err = admin.GetClusterInfos()
-			if  err == nil {
+			if err == nil {
 				break
 			}
 			logger.Info("wait custer consistent")
@@ -105,7 +137,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.Di
 	if err != nil {
 		return Cluster.Wrap(err, "DispatchMasters")
 	}
-	logger.V(3).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
+	logger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
 
 	// Second select Node that is already a slave
 	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
@@ -145,7 +177,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.Di
 		}
 	} else {
 		logger.Info("current masters < specification", "curMasters", curMasters, "masterSize", cNbMaster)
-		//We are scaling up the nbmaster or the nbmaster doesn't change.
+		// We are scaling up the nbmaster or the nbmaster doesn't change.
 		// assign master/slave roles
 		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
 		if bestEffort {

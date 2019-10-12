@@ -6,12 +6,12 @@ import (
 
 // Cluster represents a Redis Cluster
 type Cluster struct {
-	Name      string
-	Namespace string
-	Nodes     map[string]*Node
+	Name           string
+	Namespace      string
+	Nodes          map[string]*Node
 	Status         redisv1alpha1.ClusterStatus
 	NodesPlacement redisv1alpha1.NodesPlacementInfo
-	ActionsInfo ClusterActionsInfo
+	ActionsInfo    ClusterActionsInfo
 }
 
 // ClusterActionsInfo use to store information about current action on the Cluster

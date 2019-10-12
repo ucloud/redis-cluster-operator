@@ -157,15 +157,30 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}
+
+	err = r.waitForClusterJoin(instance, clusterInfos, admin)
+	if err != nil {
+		switch GetType(err) {
+		case Requeue:
+			reqLogger.WithValues("err", err).Info("requeue")
+			return reconcile.Result{RequeueAfter: requeueAfter}, nil
+		}
+		new := instance.Status.DeepCopy()
+		SetClusterFailed(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
+		return reconcile.Result{}, err
+	}
+
 	status := buildClusterStatus(clusterInfos, redisClusterPods.Items)
+	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
-	err = r.sync(instance, clusterInfos, admin)
+	//err = r.sync(instance, clusterInfos, admin)
+	err = r.syncCluster(instance, clusterInfos, admin)
 	if err != nil {
 		new := instance.Status.DeepCopy()
 		SetClusterFailed(new, err.Error())
 		r.updateClusterIfNeed(instance, new)
-		reqLogger.WithValues("err", err).Info("requeue")
 		return reconcile.Result{}, err
 	}
 	new := instance.Status.DeepCopy()
