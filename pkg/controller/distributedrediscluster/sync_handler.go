@@ -34,18 +34,18 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.D
 
 func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	logger.Info(">>> Assign a different config epoch to each node")
-	err := admin.SetConfigEpoch()
-	if err != nil {
-		return Redis.Wrap(err, "SetConfigEpoch")
-	}
+	//logger.Info(">>> Assign a different config epoch to each node")
+	//err := admin.SetConfigEpoch()
+	//if err != nil {
+	//	return Redis.Wrap(err, "SetConfigEpoch")
+	//}
 	var firstNode *redisutil.Node
 	for _, nodeInfo := range clusterInfos.Infos {
 		firstNode = nodeInfo.Node
 		break
 	}
 	logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
-	err = admin.AttachNodeToCluster(firstNode.IPPort())
+	err := admin.AttachNodeToCluster(firstNode.IPPort())
 	if err != nil {
 		return Redis.Wrap(err, "AttachNodeToCluster")
 	}
@@ -54,9 +54,10 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1al
 	// the config as they are still empty with unassigned slots.
 	time.Sleep(1 * time.Second)
 	_, err = admin.GetClusterInfos()
-	if err == nil {
+	if err != nil {
 		return Requeue.Wrap(err, "wait for cluster join")
 	}
+	return nil
 }
 
 func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
