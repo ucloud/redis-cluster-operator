@@ -183,9 +183,15 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		r.updateClusterIfNeed(instance, new)
 		return reconcile.Result{}, err
 	}
-	new := instance.Status.DeepCopy()
-	SetClusterOK(new, "OK")
-	r.updateClusterIfNeed(instance, new)
+	newClusterInfos, err := admin.GetClusterInfos()
+	if err != nil {
+		if clusterInfos.Status == redisutil.ClusterInfosPartial {
+			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
+		}
+	}
+	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items)
+	SetClusterOK(newStatus, "OK")
+	r.updateClusterIfNeed(instance, newStatus)
 	return reconcile.Result{}, nil
 	//// Define a new Pod object
 	//pod := newPodForCR(instance)
