@@ -132,20 +132,23 @@ func ClusterStatefulSetName(clusterName string) string {
 	return fmt.Sprintf("drc-%s", clusterName)
 }
 
-func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
-	args := []string{
+func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) []string {
+	cmd := []string{
+		"redis-server",
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
 	if password != nil {
-		args = append(args, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
+		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
 			fmt.Sprintf("--masterauth '$(%s)'", passwordENV))
 	}
-
-	cmd := []string{
-		"redis-server",
+	if len(cluster.Spec.Command) > 0 {
+		cmd = append(cmd, cluster.Spec.Command...)
 	}
+	return cmd
+}
 
+func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
 	probeArg := "redis-cli -h $(hostname)"
 
 	container := corev1.Container{
@@ -164,8 +167,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 			},
 		},
 		VolumeMounts: volumeMounts(),
-		Command:      cmd,
-		Args:         args,
+		Command:      getRedisCommand(cluster, password),
 		LivenessProbe: &corev1.Probe{
 			InitialDelaySeconds: graceTime,
 			TimeoutSeconds:      5,
