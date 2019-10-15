@@ -17,6 +17,9 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.D
 	cluster.Validate()
 	// step 1. apply statefulSet for cluster
 	labels := getLabels(cluster)
+	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
+		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
+	}
 	if err := r.ensurer.EnsureRedisStatefulset(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulset")
 	}
