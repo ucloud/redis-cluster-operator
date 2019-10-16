@@ -61,7 +61,7 @@ spec:
               format: int32
               type: integer
               minimum: 3
-              maximum: 10
+              maximum: 100
             clusterReplicas:
               format: int32
               type: integer
