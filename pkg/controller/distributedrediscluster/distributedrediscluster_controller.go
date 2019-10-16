@@ -2,21 +2,25 @@ package distributedrediscluster
 
 import (
 	"context"
-	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 var log = logf.Log.WithName("controller_distributedrediscluster")
@@ -55,18 +59,29 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to primary resource DistributedRedisCluster
-	err = c.Watch(&source.Kind{Type: &redisv1alpha1.DistributedRedisCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
+	pred := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Call UpdateFunc")
+			// Ignore updates to CR status in which case metadata.Generation does not change
+			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true")
+				return true
+			}
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
+			return true
+		},
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner DistributedRedisCluster
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &redisv1alpha1.DistributedRedisCluster{},
-	})
+	// Watch for changes to primary resource DistributedRedisCluster
+	err = c.Watch(&source.Kind{Type: &redisv1alpha1.DistributedRedisCluster{}}, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
 		return err
 	}
@@ -112,17 +127,71 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, err
 	}
 
-	err = r.sync(instance)
-	status := buildClusterStatus(err)
-	r.updateClusterIfNeed(instance, status)
+	err = r.waitPodReady(instance)
 	if err != nil {
 		reqLogger.WithValues("err", err).Info("requeue")
+		new := instance.Status.DeepCopy()
+		SetClusterScaling(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
+		return reconcile.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(instance.Namespace, statefulsets.ClusterStatefulSetName(instance.Name))
+	if err != nil {
+		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
+	}
+	password, err := getClusterPassword(r.client, instance)
+	if err != nil {
+		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
+	}
+
+	admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
+	if err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
+	}
+	defer admin.Close()
+
+	clusterInfos, err := admin.GetClusterInfos()
+	if err != nil {
+		if clusterInfos.Status == redisutil.ClusterInfosPartial {
+			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
+		}
+	}
+
+	err = r.waitForClusterJoin(instance, clusterInfos, admin)
+	if err != nil {
 		switch GetType(err) {
 		case Requeue:
+			reqLogger.WithValues("err", err).Info("requeue")
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 		}
+		new := instance.Status.DeepCopy()
+		SetClusterFailed(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
 		return reconcile.Result{}, err
 	}
+
+	status := buildClusterStatus(clusterInfos, redisClusterPods.Items)
+	reqLogger.V(4).Info("buildClusterStatus", "status", status)
+	r.updateClusterIfNeed(instance, status)
+
+	//err = r.sync(instance, clusterInfos, admin)
+	err = r.syncCluster(instance, clusterInfos, admin)
+	if err != nil {
+		new := instance.Status.DeepCopy()
+		SetClusterFailed(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
+		return reconcile.Result{}, err
+	}
+	newClusterInfos, err := admin.GetClusterInfos()
+	if err != nil {
+		if clusterInfos.Status == redisutil.ClusterInfosPartial {
+			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
+		}
+	}
+	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items)
+	SetClusterOK(newStatus, "OK")
+	r.updateClusterIfNeed(instance, newStatus)
 	return reconcile.Result{}, nil
 	//// Define a new Pod object
 	//pod := newPodForCR(instance)

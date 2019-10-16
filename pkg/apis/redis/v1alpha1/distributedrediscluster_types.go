@@ -60,6 +60,7 @@ type RedisClusterNode struct {
 	Slots     []string  `json:"slots,omitempty"`
 	MasterRef string    `json:"masterRef,omitempty"`
 	PodName   string    `json:"podName"`
+	NodeName  string    `json:"nodeName"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

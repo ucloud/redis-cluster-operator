@@ -6,9 +6,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/configmaps"
 )
 
 const (
@@ -19,6 +19,8 @@ const (
 	graceTime = 30
 
 	passwordENV = "REDIS_PASSWORD"
+
+	configMapVolumeName = "conf"
 )
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
@@ -34,7 +36,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 			Name:            name,
 			Namespace:       namespace,
 			Labels:          labels,
-			OwnerReferences: ownerReferences(cluster),
+			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: cluster.Spec.ServiceName,
@@ -53,6 +55,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 					Affinity:        getAffinity(spec.Affinity, labels),
 					Tolerations:     spec.ToleRations,
 					SecurityContext: spec.SecurityContext,
+					NodeSelector:    cluster.Spec.NodeSelector,
 					Containers: []corev1.Container{
 						redisServerContainer(cluster, password),
 					},
@@ -68,7 +71,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 		}
 		if spec.Storage.DeleteClaim {
 			// set an owner reference so the persistent volumes are deleted when the cluster be deleted.
-			ss.Spec.VolumeClaimTemplates[0].OwnerReferences = ownerReferences(cluster)
+			ss.Spec.VolumeClaimTemplates[0].OwnerReferences = redisv1alpha1.DefaultOwnerReferences(cluster)
 		}
 	}
 	return ss
@@ -117,34 +120,28 @@ func persistentClaim(cluster *redisv1alpha1.DistributedRedisCluster, labels map[
 	}
 }
 
-func ownerReferences(cluster *redisv1alpha1.DistributedRedisCluster) []metav1.OwnerReference {
-	return []metav1.OwnerReference{
-		*metav1.NewControllerRef(cluster, schema.GroupVersionKind{
-			Group:   redisv1alpha1.SchemeGroupVersion.Group,
-			Version: redisv1alpha1.SchemeGroupVersion.Version,
-			Kind:    redisv1alpha1.DistributedRedisClusterKind,
-		}),
-	}
-}
-
 func ClusterStatefulSetName(clusterName string) string {
 	return fmt.Sprintf("drc-%s", clusterName)
 }
 
-func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
-	args := []string{
+func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) []string {
+	cmd := []string{
+		"/conf/fix-ip.sh",
+		"redis-server",
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
 	if password != nil {
-		args = append(args, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
+		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
 			fmt.Sprintf("--masterauth '$(%s)'", passwordENV))
 	}
-
-	cmd := []string{
-		"redis-server",
+	if len(cluster.Spec.Command) > 0 {
+		cmd = append(cmd, cluster.Spec.Command...)
 	}
+	return cmd
+}
 
+func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
 	probeArg := "redis-cli -h $(hostname)"
 
 	container := corev1.Container{
@@ -163,8 +160,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 			},
 		},
 		VolumeMounts: volumeMounts(),
-		Command:      cmd,
-		Args:         args,
+		Command:      getRedisCommand(cluster, password),
 		LivenessProbe: &corev1.Probe{
 			InitialDelaySeconds: graceTime,
 			TimeoutSeconds:      5,
@@ -191,19 +187,29 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 				},
 			},
 		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "POD_IP",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+		},
 		Resources: *cluster.Spec.Resources,
 		// TODO store redis data when pod stop
-		//Lifecycle: &corev1.Lifecycle{
-		//	PreStop: &corev1.Handler{
-		//		Exec: &corev1.ExecAction{
-		//			Command: []string{"/bin/sh", "-c", "/redis-shutdown/shutdown.sh"},
-		//		},
-		//	},
-		//},
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "/conf/shutdown.sh"},
+				},
+			},
+		},
 	}
 
 	if password != nil {
-		container.Env = []corev1.EnvVar{*password}
+		container.Env = append(container.Env, *password)
 	}
 
 	return container
@@ -214,6 +220,10 @@ func volumeMounts() []corev1.VolumeMount {
 		{
 			Name:      redisStorageVolumeName,
 			MountPath: "/data",
+		},
+		{
+			Name:      configMapVolumeName,
+			MountPath: "/conf",
 		},
 	}
 }
@@ -239,7 +249,21 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVa
 }
 
 func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volume {
-	var volumes []corev1.Volume
+	executeMode := int32(0755)
+	volumes := []corev1.Volume{
+		{
+			Name: configMapVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: configmaps.RedisConfigMapName(cluster.Name),
+					},
+					DefaultMode: &executeMode,
+				},
+			},
+		},
+	}
+
 	dataVolume := redisDataVolume(cluster)
 	if dataVolume != nil {
 		volumes = append(volumes, *dataVolume)

@@ -67,8 +67,129 @@ func schema_pkg_apis_redis_v1alpha1_DistributedRedisClusterSpec(ref common.Refer
 			SchemaProps: spec.SchemaProps{
 				Description: "DistributedRedisClusterSpec defines the desired state of DistributedRedisCluster",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Description: "INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"command": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"masterSize": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"clusterReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"serviceName": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"config": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"nodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"toleRations": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"securityContext": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/api/core/v1.PodSecurityContext"),
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"storage": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1.RedisStorage"),
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"rootPasswordSecret": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/api/core/v1.LocalObjectReference"),
+						},
+					},
+				},
 			},
 		},
+		Dependencies: []string{
+			"github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1.RedisStorage", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
 	}
 }
 
@@ -78,7 +199,43 @@ func schema_pkg_apis_redis_v1alpha1_DistributedRedisClusterStatus(ref common.Ref
 			SchemaProps: spec.SchemaProps{
 				Description: "DistributedRedisClusterStatus defines the observed state of DistributedRedisCluster",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Description: "INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"numberOfMaster": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"nodes": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1.RedisClusterNode"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"status", "nodes"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1.RedisClusterNode"},
 	}
 }

@@ -1,13 +1,17 @@
 package redisutil
 
+import (
+	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+)
+
 // Cluster represents a Redis Cluster
 type Cluster struct {
-	Name      string
-	Namespace string
-	Nodes     map[string]*Node
-	//Status         redisv1alpha1.ClusterStatus
-	//NodesPlacement redisv1alpha1.NodesPlacementInfo
-	ActionsInfo ClusterActionsInfo
+	Name           string
+	Namespace      string
+	Nodes          map[string]*Node
+	Status         redisv1alpha1.ClusterStatus
+	NodesPlacement redisv1alpha1.NodesPlacementInfo
+	ActionsInfo    ClusterActionsInfo
 }
 
 // ClusterActionsInfo use to store information about current action on the Cluster
@@ -60,10 +64,7 @@ func (c *Cluster) GetNodeByIP(ip string) (*Node, error) {
 // if not present in the cluster return an error
 func (c *Cluster) GetNodeByPodName(name string) (*Node, error) {
 	findFunc := func(node *Node) bool {
-		if node.Pod == nil {
-			return false
-		}
-		if node.Pod.Name == name {
+		if node.PodName == name {
 			return true
 		}
 		return false
