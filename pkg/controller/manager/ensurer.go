@@ -8,6 +8,7 @@ import (
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/configmaps"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/poddisruptionbudgets"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/services"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
@@ -22,6 +23,7 @@ type realEnsureResource struct {
 	statefulSetClient k8sutil.IStatefulSetControl
 	svcClient         k8sutil.IServiceControl
 	configMapClient   k8sutil.IConfigMapControl
+	pdbClient         k8sutil.IPodDisruptionBudgetControl
 	logger            logr.Logger
 }
 
@@ -30,11 +32,15 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 		statefulSetClient: k8sutil.NewStatefulSetController(client),
 		svcClient:         k8sutil.NewServiceController(client),
 		configMapClient:   k8sutil.NewConfigMapController(client),
+		pdbClient:         k8sutil.NewPodDisruptionBudgetController(client),
 		logger:            logger,
 	}
 }
 
 func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	if err := r.ensureRedisPDB(cluster, labels); err != nil {
+		return err
+	}
 	name := statefulsets.ClusterStatefulSetName(cluster.Name)
 	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
 	if err == nil {
@@ -48,6 +54,17 @@ func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.Distr
 			Info("creating a new statefulSet")
 		ss := statefulsets.NewStatefulSetForCR(cluster, labels)
 		return r.statefulSetClient.CreateStatefulSet(ss)
+	}
+	return err
+}
+
+func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	_, err := r.pdbClient.GetPodDisruptionBudget(cluster.Namespace, cluster.Name)
+	if err != nil && errors.IsNotFound(err) {
+		r.logger.WithValues("PDB.Namespace", cluster.Namespace, "PDB.Name", cluster.Spec.ServiceName).
+			Info("creating a new PodDisruptionBudget")
+		pdb := poddisruptionbudgets.NewPodDisruptionBudgetForCR(cluster, labels)
+		return r.pdbClient.CreatePodDisruptionBudget(pdb)
 	}
 	return err
 }

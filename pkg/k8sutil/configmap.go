@@ -31,8 +31,8 @@ func NewConfigMapController(client client.Client) IConfigMapControl {
 }
 
 // CreateConfigMap implement the IConfigMapControl.Interface.
-func (s *ConfigMapController) CreateConfigMap(svc *corev1.ConfigMap) error {
-	return s.client.Create(context.TODO(), svc)
+func (s *ConfigMapController) CreateConfigMap(cm *corev1.ConfigMap) error {
+	return s.client.Create(context.TODO(), cm)
 }
 
 // UpdateConfigMap implement the IConfigMapControl.Interface.
