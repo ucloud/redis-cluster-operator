@@ -61,20 +61,20 @@ func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin
 	for nodesInfo, slots := range migrationSlotInfo {
 		// There is a need for real error handling here, we must ensure we don't keep a slot in abnormal state
 		if nodesInfo.From == nil {
-			log.V(4).Info(fmt.Sprintf("1) add slots that having probably been lost during scale down, destination: ", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots)))
+			log.V(4).Info("1) add slots that having probably been lost during scale down", "destination:", nodesInfo.To.ID, "total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err := admin.AddSlots(nodesInfo.To.IPPort(), slots)
 			if err != nil {
 				log.Error(err, "error during ADDSLOTS")
 				return err
 			}
 		} else {
-			log.V(6).Info("1) Send SETSLOT IMPORTING command target:", nodesInfo.To.ID, " source-node:", nodesInfo.From.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+			log.V(6).Info("1) Send SETSLOT IMPORTING command", "target:", nodesInfo.To.ID, "source-node:", nodesInfo.From.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err := admin.SetSlots(nodesInfo.To.IPPort(), "IMPORTING", slots, nodesInfo.From.ID)
 			if err != nil {
 				log.Error(err, "error during IMPORTING")
 				return err
 			}
-			log.V(6).Info("2) Send SETSLOT MIGRATION command target:", nodesInfo.From.ID, " destination-node:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+			log.V(6).Info("2) Send SETSLOT MIGRATION command", "target:", nodesInfo.From.ID, "destination-node:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err = admin.SetSlots(nodesInfo.From.IPPort(), "MIGRATING", slots, nodesInfo.To.ID)
 			if err != nil {
 				log.Error(err, "error during MIGRATING")
@@ -115,7 +115,7 @@ func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin
 					// we ignore those nodes
 					continue
 				}
-				log.V(6).Info("4) Send SETSLOT NODE command target:", master.ID, " new owner:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+				log.V(6).Info("4) Send SETSLOT NODE command", "target:", master.ID, "new owner:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 				err = admin.SetSlots(master.IPPort(), "NODE", slots, nodesInfo.To.ID)
 				if err != nil {
 					log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", master.IPPort(), err))
