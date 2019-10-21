@@ -250,3 +250,42 @@ func Test_buildSlotsByNode(t *testing.T) {
 		})
 	}
 }
+
+func Test_feedMigInfo(t *testing.T) {
+	redis1 := &redisutil.Node{ID: "redis1", Slots: []redisutil.Slot{0, 1, 2, 3, 4, 5, 6, 7, 8}}
+	redis2 := &redisutil.Node{ID: "redis2", Slots: []redisutil.Slot{}}
+	redis3 := &redisutil.Node{ID: "redis3", Slots: []redisutil.Slot{}}
+
+	type args struct {
+		newMasterNodes redisutil.Nodes
+		oldMasterNodes redisutil.Nodes
+		allMasterNodes redisutil.Nodes
+		nbSlots        int
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantMapOut mapSlotByMigInfo
+	}{
+		{
+			name: "basic usecase",
+			args: args{
+				newMasterNodes: redisutil.Nodes{redis1, redis2, redis3},
+				oldMasterNodes: redisutil.Nodes{redis1},
+				allMasterNodes: redisutil.Nodes{redis1, redis2, redis3},
+				nbSlots:        9,
+			},
+			wantMapOut: mapSlotByMigInfo{
+				migrationInfo{From: redis1, To: redis2}: []redisutil.Slot{3, 4, 5},
+				migrationInfo{From: redis1, To: redis3}: []redisutil.Slot{6, 7, 8},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotMapOut, _ := feedMigInfo(tt.args.newMasterNodes, tt.args.oldMasterNodes, tt.args.allMasterNodes, tt.args.nbSlots); !reflect.DeepEqual(gotMapOut, tt.wantMapOut) {
+				t.Errorf("feedMigInfo() = %v, want %v", gotMapOut, tt.wantMapOut)
+			}
+		})
+	}
+}
