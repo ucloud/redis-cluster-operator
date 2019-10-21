@@ -203,3 +203,74 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.Di
 
 	return nil
 }
+
+func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
+	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
+	cNbMaster := cluster.Spec.MasterSize
+	cReplicaFactor := cluster.Spec.ClusterReplicas
+	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
+	if err != nil {
+		return Cluster.Wrap(err, "newRedisCluster")
+	}
+
+	// First, we define the new masters
+	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
+	if err != nil {
+		return Cluster.Wrap(err, "DispatchMasters")
+	}
+	logger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
+
+	// Second select Node that is already a slave
+	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
+
+	// New slaves are slaves which is currently a master with no slots
+	newSlave := nodes.FilterByFunc(func(nodeA *redisutil.Node) bool {
+		for _, nodeB := range newMasters {
+			if nodeA.ID == nodeB.ID {
+				return false
+			}
+		}
+		for _, nodeB := range currentSlaveNodes {
+			if nodeA.ID == nodeB.ID {
+				return false
+			}
+		}
+		return true
+	})
+
+	if 0 == len(curMasters) {
+		logger.Info("Creating cluster")
+		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
+		if bestEffort {
+			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
+		}
+
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
+		}
+
+		if err := clustering.AllocSlots(admin, newMasters); err != nil {
+			return Cluster.Wrap(err, "AllocSlots")
+		}
+	} else if len(newMasters) > len(curMasters) {
+		logger.Info("Scaling cluster")
+		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
+		if bestEffort {
+			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
+		}
+
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
+		}
+
+		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
+			return Cluster.Wrap(err, "AllocSlots")
+		}
+	}
+
+	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
+		return Redis.Wrap(err, "SetConfigIfNeed")
+	}
+
+	return nil
+}

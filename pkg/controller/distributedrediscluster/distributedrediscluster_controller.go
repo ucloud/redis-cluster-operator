@@ -176,7 +176,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	r.updateClusterIfNeed(instance, status)
 
 	//err = r.sync(instance, clusterInfos, admin)
-	err = r.syncCluster(instance, clusterInfos, admin)
+	err = r.ensureCluster(instance, clusterInfos, admin)
 	if err != nil {
 		new := instance.Status.DeepCopy()
 		SetClusterFailed(new, err.Error())
