@@ -175,7 +175,6 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
-	//err = r.sync(instance, clusterInfos, admin)
 	err = r.ensureCluster(instance, clusterInfos, admin)
 	if err != nil {
 		new := instance.Status.DeepCopy()
@@ -192,7 +191,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
 	//// Define a new Pod object
 	//pod := newPodForCR(instance)
 	//

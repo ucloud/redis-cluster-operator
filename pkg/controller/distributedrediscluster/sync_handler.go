@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	requeueAfter = 10 * time.Second
+	requeueAfter  = 10 * time.Second
+	requeueEnsure = 60 * time.Second
 )
 
 func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.DistributedRedisCluster) error {
@@ -42,6 +43,9 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1al
 	//if err != nil {
 	//	return Redis.Wrap(err, "SetConfigEpoch")
 	//}
+	if _, err := admin.GetClusterInfos(); err == nil {
+		return nil
+	}
 	var firstNode *redisutil.Node
 	for _, nodeInfo := range clusterInfos.Infos {
 		firstNode = nodeInfo.Node
@@ -206,11 +210,21 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.Di
 
 func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
+	if err := admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
+		return Redis.Wrap(err, "SetConfigIfNeed")
+	}
+
 	cNbMaster := cluster.Spec.MasterSize
 	cReplicaFactor := cluster.Spec.ClusterReplicas
 	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
 	if err != nil {
 		return Cluster.Wrap(err, "newRedisCluster")
+	}
+
+	currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
+	if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
+		logger.V(3).Info("cluster ok")
+		return nil
 	}
 
 	// First, we define the new masters
@@ -264,12 +278,8 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 		}
 
 		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
-			return Cluster.Wrap(err, "AllocSlots")
+			return Cluster.Wrap(err, "RebalancedCluster")
 		}
-	}
-
-	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
 	}
 
 	return nil

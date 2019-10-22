@@ -59,9 +59,12 @@ func RebalancedCluster(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) e
 
 	// Sort nodes by their slots balance.
 	sn := newMasterNodes.SortByFunc(func(a, b *redisutil.Node) bool { return a.Balance() < b.Balance() })
-	for _, node := range sn {
-		log.V(4).Info("debug rebalanced master", "node", node.IPPort(), "balance", node.Balance())
+	if log.V(4).Enabled() {
+		for _, node := range sn {
+			log.Info("debug rebalanced master", "node", node.IPPort(), "balance", node.Balance())
+		}
 	}
+
 	log.Info(">>> rebalancing", "nodeNum", nbNode)
 
 	dstIdx := 0
@@ -102,7 +105,6 @@ func RebalancedCluster(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) e
 		if src.Balance() == 0 {
 			srcIdx -= 1
 		}
-
 	}
 
 	return nil
@@ -163,5 +165,6 @@ func moveSlot(source *MovedNode, target *redisutil.Node, admin redisutil.IAdmin)
 	if err := admin.SetSlot(source.Source.IPPort(), "NODE", source.Slot, target.ID); err != nil {
 		log.Error(err, "SET NODE", "node", source.Source.IPPort())
 	}
+	source.Source.Slots = redisutil.RemoveSlot(source.Source.Slots, source.Slot)
 	return nil
 }

@@ -163,6 +163,19 @@ func RemoveSlots(slots []Slot, removedSlots []Slot) []Slot {
 	return slots
 }
 
+// RemoveSlot return a new list of slot where a specified slot have been removed.
+func RemoveSlot(slots []Slot, removedSlot Slot) []Slot {
+	for i := 0; i < len(slots); i++ {
+		s := slots[i]
+		if s == removedSlot {
+			slots = append(slots[:i], slots[i+1:]...)
+			break
+		}
+	}
+
+	return slots
+}
+
 // AddSlots return a new list of slots after adding some slots in it, duplicates are removed
 func AddSlots(slots []Slot, addedSlots []Slot) []Slot {
 	for _, s := range addedSlots {
