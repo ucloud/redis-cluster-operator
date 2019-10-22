@@ -56,6 +56,7 @@ type Node struct {
 	PongRecv        int64
 	ConfigEpoch     int64
 	Slots           []Slot
+	balance         int
 	MigratingSlots  map[Slot]string
 	ImportingSlots  map[Slot]string
 	ServerStartTime time.Time
@@ -181,6 +182,14 @@ func (n *Node) Clear() {
 
 }
 
+func (n *Node) Balance() int {
+	return n.balance
+}
+
+func (n *Node) SetBalance(balance int) {
+	n.balance = balance
+}
+
 // SetLinkStatus set the Node link status
 func (n *Node) SetLinkStatus(status string) error {
 	n.LinkState = "" // reset value before setting the new one
@@ -304,10 +313,10 @@ func (n Nodes) FilterByFunc(fn func(*Node) bool) Nodes {
 
 // SortByFunc returns a new ordered NodeSlice, determined by a func defining ‘less’.
 func (n Nodes) SortByFunc(less func(*Node, *Node) bool) Nodes {
-	result := make(Nodes, len(n))
-	copy(result, n)
+	//result := make(Nodes, len(n))
+	//copy(result, n)
 	by(less).Sort(n)
-	return result
+	return n
 }
 
 // Len is the number of elements in the collection.

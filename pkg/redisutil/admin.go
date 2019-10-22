@@ -59,11 +59,13 @@ type IAdmin interface {
 	//ForgetNode(id string) error
 	//// ForgetNodeByAddr execute the Redis command to force the cluster to forgot the the Node
 	//ForgetNodeByAddr(id string) error
-	// SetSlots exect the redis command to set slots in a pipeline, provide
+	// SetSlots exec the redis command to set slots in a pipeline, provide
 	// and empty nodeID if the set slots commands doesn't take a nodeID in parameter
 	SetSlots(addr string, action string, slots []Slot, nodeID string) error
-	// AddSlots exect the redis command to add slots in a pipeline
+	// AddSlots exec the redis command to add slots in a pipeline
 	AddSlots(addr string, slots []Slot) error
+	// SetSlot use to set SETSLOT command on a slot
+	SetSlot(addr, action string, slot Slot, nodeID string) error
 	//// DelSlots exec the redis command to del slots in a pipeline
 	//DelSlots(addr string, slots []Slot) error
 	//// GetKeysInSlot exec the redis command to get the keys in the given slot on the node we are connected to
@@ -72,6 +74,9 @@ type IAdmin interface {
 	//CountKeysInSlot(addr string, slot Slot) (int64, error)
 	// MigrateKeys from addr to destination node. returns number of slot migrated. If replace is true, replace key on busy error
 	MigrateKeys(addr string, dest *Node, slots []Slot, batch, timeout int, replace bool) (int, error)
+	// MigrateKeys use to migrate keys from slot to other slot. if replace is true, replace key on busy error
+	// timeout is in milliseconds
+	MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int, timeout int, replace bool) (int, error)
 	//// FlushAndReset reset the cluster configuration of the node, the node is flushed in the same pipe to ensure reset works
 	//FlushAndReset(addr string, mode string) error
 	//// FlushAll flush all keys in cluster
@@ -281,6 +286,25 @@ func (a *Admin) SetSlots(addr, action string, slots []Slot, nodeID string) error
 	return nil
 }
 
+// SetSlot use to set SETSLOT command on a slot
+func (a *Admin) SetSlot(addr, action string, slot Slot, nodeID string) error {
+	c, err := a.Connections().Get(addr)
+	if err != nil {
+		return err
+	}
+	if nodeID == "" {
+		c.PipeAppend("CLUSTER", "SETSLOT", slot, action)
+	} else {
+		c.PipeAppend("CLUSTER", "SETSLOT", slot, action, nodeID)
+	}
+	if !a.Connections().ValidatePipeResp(c, addr, "Cannot SETSLOT") {
+		return fmt.Errorf("Error occured during CLUSTER SETSLOT %s", action)
+	}
+	c.PipeClear()
+
+	return nil
+}
+
 func (a *Admin) SetConfigEpoch() error {
 	configEpoch := 1
 	for addr, c := range a.Connections().GetAll() {
@@ -408,6 +432,49 @@ func (a *Admin) MigrateKeys(addr string, dest *Node, slots []Slot, batch int, ti
 			if err := a.Connections().ValidateResp(resp, addr, "Unable to run command MIGRATE"); err != nil {
 				return keyCount, err
 			}
+		}
+	}
+
+	return keyCount, nil
+}
+
+// MigrateKeys use to migrate keys from slot to other slot. if replace is true, replace key on busy error
+// timeout is in milliseconds
+func (a *Admin) MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int, timeout int, replace bool) (int, error) {
+	keyCount := 0
+	c, err := a.Connections().Get(addr)
+	if err != nil {
+		return keyCount, err
+	}
+	timeoutStr := strconv.Itoa(timeout)
+	batchStr := strconv.Itoa(batch)
+
+	for {
+		resp := c.Cmd("CLUSTER", "GETKEYSINSLOT", slot, batchStr)
+		if err := a.Connections().ValidateResp(resp, addr, "Unable to run command GETKEYSINSLOT"); err != nil {
+			return keyCount, err
+		}
+		keys, err := resp.List()
+		if err != nil {
+			log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
+			return keyCount, err
+		}
+
+		keyCount += len(keys)
+		if len(keys) == 0 {
+			break
+		}
+
+		var args []string
+		if replace {
+			args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "REPLACE", "KEYS"}, keys...)
+		} else {
+			args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "KEYS"}, keys...)
+		}
+
+		resp = c.Cmd("MIGRATE", args)
+		if err := a.Connections().ValidateResp(resp, addr, "Unable to run command MIGRATE"); err != nil {
+			return keyCount, err
 		}
 	}
 
