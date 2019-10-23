@@ -1,0 +1,7 @@
+apiVersion: redis.kun/v1alpha1
+kind: RedisClusterBackup
+metadata:
+  name: example-redisclusterbackup
+spec:
+  # Add fields here
+  size: 3
