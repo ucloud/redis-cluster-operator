@@ -59,11 +59,10 @@ func createSecret(client client.Client, secret *corev1.Secret) error {
 	}, s)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil
+			return client.Create(ctx, secret)
 		}
-		return err
 	}
-	return client.Create(ctx, secret)
+	return err
 }
 
 func upsertEnvVars(vars []corev1.EnvVar, nv ...corev1.EnvVar) []corev1.EnvVar {
