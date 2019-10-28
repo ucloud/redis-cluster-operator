@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -49,7 +51,19 @@ func OSMSecretName(name string) string {
 }
 
 func createSecret(client client.Client, secret *corev1.Secret) error {
-	return client.Create(context.TODO(), secret)
+	ctx := context.TODO()
+	s := &corev1.Secret{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: secret.Namespace,
+		Name:      secret.Name,
+	}, s)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return client.Create(ctx, secret)
 }
 
 func upsertEnvVars(vars []corev1.EnvVar, nv ...corev1.EnvVar) []corev1.EnvVar {
@@ -74,4 +88,20 @@ func IsRequestRetryable(err error) bool {
 		kerr.IsTimeout(err) ||
 		kerr.IsServerTimeout(err) ||
 		kerr.IsTooManyRequests(err)
+}
+
+// Returns the REDIS_PASSWORD environment variable.
+func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) corev1.EnvVar {
+	secretName := cluster.Spec.PasswordSecret.Name
+	return corev1.EnvVar{
+		Name: "REDIS_PASSWORD",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: secretName,
+				},
+				Key: "password",
+			},
+		},
+	}
 }

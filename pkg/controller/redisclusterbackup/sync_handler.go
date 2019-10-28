@@ -36,17 +36,31 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 
 	// Do not process "completed", aka "failed" or "succeeded", backups.
 	if backup.Status.Phase == redisv1alpha1.BackupPhaseFailed || backup.Status.Phase == redisv1alpha1.BackupPhaseSucceeded {
-		//delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
-		//if err := r.crController.UpdateCR(backup); err != nil {
-		//	r.recorder.Event(
-		//		backup,
-		//		corev1.EventTypeWarning,
-		//		event.BackupError,
-		//		err.Error(),
-		//	)
-		//	return err
-		//}
+		delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+		if err := r.crController.UpdateCR(backup); err != nil {
+			r.recorder.Event(
+				backup,
+				corev1.EventTypeWarning,
+				event.BackupError,
+				err.Error(),
+			)
+			return err
+		}
 		return nil
+	}
+
+	if backup.Labels == nil {
+		backup.Labels = make(map[string]string)
+	}
+	backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
+	if err := r.crController.UpdateCR(backup); err != nil {
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupError,
+			err.Error(),
+		)
+		return err
 	}
 
 	if err := r.ValidateBackup(backup); err != nil {
@@ -159,6 +173,18 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
+	backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
+	backup.Labels[redisv1alpha1.LabelBackupStatus] = string(redisv1alpha1.BackupPhaseRunning)
+	if err := r.crController.UpdateCR(backup); err != nil {
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupError,
+			err.Error(),
+		)
+		return err
+	}
+
 	r.recorder.Event(
 		backup,
 		corev1.EventTypeNormal,
@@ -218,8 +244,9 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   jobName,
-			Labels: jobLabel,
+			Name:      jobName,
+			Namespace: backup.Namespace,
+			Labels:    jobLabel,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: redisv1alpha1.SchemeGroupVersion.String(),
@@ -245,19 +272,6 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 								fmt.Sprintf(`--enable-analytics=%v`, "false"),
 								"--",
 							}, dumpArgs...),
-							Env: upsertEnvVars([]corev1.EnvVar{
-								{
-									Name: "REDIS_PASSWORD",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: cluster.Spec.PasswordSecret.Name,
-											},
-											Key: "password",
-										},
-									},
-								},
-							}),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      persistentVolume.Name,
@@ -300,6 +314,9 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 			Name:         "local",
 			VolumeSource: backup.Spec.Backend.Local.VolumeSource,
 		})
+	}
+	if cluster.Spec.PasswordSecret != nil {
+		job.Spec.Template.Spec.Containers[0].Env = append(job.Spec.Template.Spec.Containers[0].Env, redisPassword(cluster))
 	}
 
 	return job, nil
