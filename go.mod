@@ -1,13 +1,18 @@
 module github.com/ucloud/redis-cluster-operator
 
 require (
+	github.com/appscode/go v0.0.0-20191006073906-e3d193d493fc
+	github.com/appscode/osm v0.12.0
+	github.com/aws/aws-sdk-go v1.20.20
 	github.com/coreos/prometheus-operator v0.31.1 // indirect
+	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/mediocregopher/radix.v2 v0.0.0-20181115013041-b67df6e626f9
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190919225052-3a85983ecc72
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/pflag v1.0.3
+	gomodules.xyz/stow v0.2.0
 	k8s.io/api v0.0.0-20190612125737-db0771252981
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible

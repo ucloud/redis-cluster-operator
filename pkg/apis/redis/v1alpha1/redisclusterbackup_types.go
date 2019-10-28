@@ -5,6 +5,10 @@ import (
 	store "kmodules.xyz/objectstore-api/api/v1"
 )
 
+const (
+	ResourceSingularBackup = "backup"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -14,6 +18,7 @@ type RedisClusterBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	Image            string        `json:"image,omitempty"`
 	RedisClusterName string        `json:"redisClusterName"`
 	Storage          *RedisStorage `json:"storage,omitempty"`
 	// Snapshot Spec
@@ -23,12 +28,12 @@ type RedisClusterBackupSpec struct {
 type BackupPhase string
 
 const (
-	// used for Snapshots that are currently running
-	SnapshotPhaseRunning BackupPhase = "Running"
-	// used for Snapshots that are Succeeded
-	SnapshotPhaseSucceeded BackupPhase = "Succeeded"
-	// used for Snapshots that are Failed
-	SnapshotPhaseFailed BackupPhase = "Failed"
+	// used for Backup that are currently running
+	BackupPhaseRunning BackupPhase = "Running"
+	// used for Backup that are Succeeded
+	BackupPhaseSucceeded BackupPhase = "Succeeded"
+	// used for Backup that are Failed
+	BackupPhaseFailed BackupPhase = "Failed"
 )
 
 // RedisClusterBackupStatus defines the observed state of RedisClusterBackup

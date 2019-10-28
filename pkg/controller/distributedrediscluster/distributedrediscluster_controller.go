@@ -42,7 +42,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler := &ReconcileDistributedRedisCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
-	reconiler.clusterStatusController = k8sutil.NewClusterControl(reconiler.client)
+	reconiler.clusterStatusController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
 	return reconiler
@@ -101,7 +101,7 @@ type ReconcileDistributedRedisCluster struct {
 	ensurer                 clustermanger.IEnsureResource
 	checker                 clustermanger.ICheck
 	statefulSetController   k8sutil.IStatefulSetControl
-	clusterStatusController k8sutil.ICluster
+	clusterStatusController k8sutil.ICustomResource
 }
 
 // Reconcile reads that state of the cluster for a DistributedRedisCluster object and makes changes based on the state read

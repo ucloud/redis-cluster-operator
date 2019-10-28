@@ -56,3 +56,17 @@ const (
 	// it means on master by VM
 	NodesPlacementInfoOptimal NodesPlacementInfo = "Optimal"
 )
+
+const (
+	DatabaseNamePrefix = "redis"
+
+	GenericKey = "redis.kun"
+
+	LabelClusterName = GenericKey + "/name"
+
+	BackupKey         = ResourceSingularBackup + "." + GenericKey
+	LabelBackupStatus = BackupKey + "/status"
+
+	JobTypeBackup  = "backup"
+	JobTypeRestore = "restore"
+)

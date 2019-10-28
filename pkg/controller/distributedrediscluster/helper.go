@@ -26,7 +26,7 @@ const passwordKey = "password"
 
 func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string {
 	dynLabels := map[string]string{
-		redisv1alpha1.LabelNameKey: cluster.Name,
+		redisv1alpha1.LabelClusterName: cluster.Name,
 	}
 	return utils.MergeLabels(defaultLabels, dynLabels, cluster.Labels)
 }
