@@ -100,7 +100,7 @@ rm -rf *
 case "$op" in
   backup)
     echo "Dumping database......"
-    redis-cli --rdb dump.rdb -h ${REDIS_HOST} -a=${REDIS_PASSWORD}
+    redis-cli --rdb dump.rdb -h ${REDIS_HOST} -a "${REDIS_PASSWORD}"
 
     echo "Uploading dump file to the backend......."
     osm push --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_DATA_DIR" "$REDIS_FOLDER/$REDIS_SNAPSHOT"

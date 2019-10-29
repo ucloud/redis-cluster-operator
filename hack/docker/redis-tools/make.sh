@@ -25,10 +25,12 @@ mkdir -p $DIST
 build() {
   pushd "$REPO_ROOT/hack/docker/redis-tools"
 
-  # Download osm
-  wget https://cdn.appscode.com/binaries/osm/${OSM_VER}/osm-alpine-amd64
-  chmod +x osm-alpine-amd64
-  mv osm-alpine-amd64 osm
+  if [ ! -f "osm" ]; then
+    # Download osm
+    wget https://cdn.appscode.com/binaries/osm/${OSM_VER}/osm-alpine-amd64
+    chmod +x osm-alpine-amd64
+    mv osm-alpine-amd64 osm
+  fi
 
   local cmd="docker build --pull -t $DOCKER_REGISTRY/$IMG:$TAG ."
   echo $cmd; $cmd
