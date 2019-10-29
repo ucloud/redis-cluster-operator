@@ -175,9 +175,7 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 	if err := r.create(reqLogger, instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.handleBackupJob(reqLogger, instance); err != nil {
-		return reconcile.Result{}, err
-	}
+
 	return reconcile.Result{}, nil
 }
 

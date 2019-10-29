@@ -51,6 +51,29 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return nil
 	}
 
+	running, err := r.isBackupRunning(backup)
+	if err != nil {
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupError,
+			err.Error(),
+		)
+		return err
+	}
+	if running {
+		msg := "One Backup is already Running"
+		reqLogger.Info(msg)
+		//r.markAsFailedBackup(backup, msg)
+		//r.recorder.Event(
+		//	backup,
+		//	corev1.EventTypeWarning,
+		//	event.BackupFailed,
+		//	msg,
+		//)
+		return r.handleBackupJob(reqLogger, backup)
+	}
+
 	if backup.Labels == nil {
 		backup.Labels = make(map[string]string)
 	}
@@ -77,28 +100,6 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 			err.Error(),
 		)
 		return nil // stop retry
-	}
-
-	running, err := r.isBackupRunning(backup)
-	if err != nil {
-		r.recorder.Event(
-			backup,
-			corev1.EventTypeWarning,
-			event.BackupError,
-			err.Error(),
-		)
-		return err
-	}
-	if running {
-		msg := "One Backup is already Running"
-		r.markAsFailedBackup(backup, msg)
-		r.recorder.Event(
-			backup,
-			corev1.EventTypeWarning,
-			event.BackupFailed,
-			msg,
-		)
-		return nil
 	}
 
 	cluster, err := r.crController.GetDistributedRedisCluster(backup.Namespace, backup.Spec.RedisClusterName)
@@ -399,8 +400,23 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		return err
 	}
 
+	cluster, err := r.crController.GetDistributedRedisCluster(backup.Namespace, backup.Spec.RedisClusterName)
+	if err != nil {
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupError,
+			err.Error(),
+		)
+		return err
+	}
+
+	masterSize := int(cluster.Spec.MasterSize)
 	jobNum := len(jobs.Items)
-	reqLogger.V(3).Info("Handle Backup Job", "jobNum", jobNum)
+	reqLogger.V(3).Info("Handle Backup Job", "jobNum", jobNum, "masterNum", masterSize)
+	if jobNum != masterSize {
+		return nil
+	}
 	jobSucceededNum := 0
 	for _, job := range jobs.Items {
 		if job.Status.Succeeded > 0 {
