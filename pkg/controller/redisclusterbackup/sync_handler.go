@@ -198,15 +198,30 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 	for _, node := range cluster.Status.Nodes {
 		if node.Role == redisv1alpha1.RedisClusterNodeRoleMaster {
 			createJob := job.DeepCopy()
-			createJob.Name = fmt.Sprintf("redisbacup-%s-%d", backup.Name, i)
+			name := fmt.Sprintf("redisbacup-%s-%d", backup.Name, i)
+			// Folder name inside Cloud bucket where backup will be uploaded
+			folderName, err := backup.Location()
+			if err != nil {
+				r.recorder.Event(
+					backup,
+					corev1.EventTypeWarning,
+					event.BackupError,
+					err.Error(),
+				)
+				return err
+			}
+			createJob.Name = name
 			createJob.Spec.Template.Spec.Containers[0].Args = append(createJob.Spec.Template.Spec.Containers[0].Args,
-				fmt.Sprintf(`--host=%s`, node.IP), "--")
+				fmt.Sprintf(`--host=%s`, node.IP),
+				fmt.Sprintf(`--folder=%s`, folderName),
+				fmt.Sprintf(`--snapshot=%s-%d`, backup.Name, i),
+				"--")
 			i++
 			if err := r.client.Create(context.TODO(), createJob); err != nil {
 				r.recorder.Event(
 					backup,
 					corev1.EventTypeWarning,
-					event.BackupFailed,
+					event.BackupError,
 					err.Error(),
 				)
 				return err
@@ -246,12 +261,6 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 		return nil, err
 	}
 
-	// Folder name inside Cloud bucket where backup will be uploaded
-	folderName, err := backup.Location()
-	if err != nil {
-		return nil, err
-	}
-
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -278,8 +287,6 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 								redisv1alpha1.JobTypeBackup,
 								fmt.Sprintf(`--data-dir=%s`, backupDumpDir),
 								fmt.Sprintf(`--bucket=%s`, bucket),
-								fmt.Sprintf(`--folder=%s`, folderName),
-								fmt.Sprintf(`--snapshot=%s`, backup.Name),
 								fmt.Sprintf(`--enable-analytics=%v`, "false"),
 							},
 							VolumeMounts: []corev1.VolumeMount{

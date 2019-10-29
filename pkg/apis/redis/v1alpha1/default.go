@@ -81,16 +81,17 @@ func (in *RedisClusterBackup) Validate() error {
 
 func (in *RedisClusterBackup) Location() (string, error) {
 	spec := in.Spec.Backend
+	timePrefix := in.Status.StartTime.Format("200601020304")
 	if spec.S3 != nil {
-		return filepath.Join(spec.S3.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName), nil
+		return filepath.Join(spec.S3.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	} else if spec.GCS != nil {
-		return filepath.Join(spec.GCS.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName), nil
+		return filepath.Join(spec.GCS.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	} else if spec.Azure != nil {
-		return filepath.Join(spec.Azure.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName), nil
+		return filepath.Join(spec.Azure.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	} else if spec.Local != nil {
-		return filepath.Join(DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName), nil
+		return filepath.Join(DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	} else if spec.Swift != nil {
-		return filepath.Join(spec.Swift.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName), nil
+		return filepath.Join(spec.Swift.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	}
 	return "", fmt.Errorf("no storage provider is configured")
 }
