@@ -52,8 +52,5 @@ func (s *ConfigMapController) GetConfigMap(namespace, name string) (*corev1.Conf
 		Name:      name,
 		Namespace: namespace,
 	}, cm)
-	if err != nil {
-		return nil, err
-	}
 	return cm, err
 }

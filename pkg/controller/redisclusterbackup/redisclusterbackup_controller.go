@@ -42,6 +42,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	r := &ReconcileRedisClusterBackup{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	r.crController = k8sutil.NewCRControl(r.client)
+	r.jobController = k8sutil.NewJobController(r.client)
 	r.recorder = mgr.GetEventRecorderFor("redis-cluster-operator-backup")
 	return r
 }
@@ -112,7 +113,8 @@ type ReconcileRedisClusterBackup struct {
 	scheme   *runtime.Scheme
 	recorder record.EventRecorder
 
-	crController k8sutil.ICustomResource
+	crController  k8sutil.ICustomResource
+	jobController k8sutil.IJobControl
 }
 
 // Reconcile reads that state of the cluster for a RedisClusterBackup object and makes changes based on the state read
@@ -142,8 +144,8 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 
 	// Check if the RedisClusterBackup instance is marked to be deleted, which is
 	// indicated by the deletion timestamp being set.
-	isMemcachedMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
-	if isMemcachedMarkedToBeDeleted {
+	isBackupMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
+	if isBackupMarkedToBeDeleted {
 		if contains(instance.GetFinalizers(), backupFinalizer) {
 			// Run finalization logic for backupFinalizer. If the
 			// finalization logic fails, don't remove the finalizer so
@@ -171,6 +173,9 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 	}
 
 	if err := r.create(reqLogger, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+	if err := r.handleBackupJob(reqLogger, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil

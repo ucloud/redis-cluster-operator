@@ -55,9 +55,6 @@ func (s *stateFulSetController) GetStatefulSet(namespace, name string) (*appsv1.
 		Name:      name,
 		Namespace: namespace,
 	}, statefulSet)
-	if err != nil {
-		return nil, err
-	}
 	return statefulSet, err
 }
 

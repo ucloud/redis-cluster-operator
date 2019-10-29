@@ -67,6 +67,8 @@ const (
 	BackupKey         = ResourceSingularBackup + "." + GenericKey
 	LabelBackupStatus = BackupKey + "/status"
 
+	AnnotationJobType = GenericKey + "/job-type"
+
 	JobTypeBackup  = "backup"
 	JobTypeRestore = "restore"
 )

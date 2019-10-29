@@ -3,10 +3,12 @@ package redisclusterbackup
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -15,7 +17,7 @@ import (
 )
 
 const (
-	backupDumpDir  = "/var/data"
+	backupDumpDir  = "/data"
 	UtilVolumeName = "util-volume"
 )
 
@@ -192,14 +194,24 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		"Backup running",
 	)
 
-	if err := r.client.Create(context.TODO(), job); err != nil {
-		r.recorder.Event(
-			backup,
-			corev1.EventTypeWarning,
-			event.BackupFailed,
-			err.Error(),
-		)
-		return err
+	i := 0
+	for _, node := range cluster.Status.Nodes {
+		if node.Role == redisv1alpha1.RedisClusterNodeRoleMaster {
+			createJob := job.DeepCopy()
+			createJob.Name = fmt.Sprintf("redisbacup-%s-%d", backup.Name, i)
+			createJob.Spec.Template.Spec.Containers[0].Args = append(createJob.Spec.Template.Spec.Containers[0].Args,
+				fmt.Sprintf(`--host=%s`, node.IP), "--")
+			i++
+			if err := r.client.Create(context.TODO(), createJob); err != nil {
+				r.recorder.Event(
+					backup,
+					corev1.EventTypeWarning,
+					event.BackupFailed,
+					err.Error(),
+				)
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -219,17 +231,15 @@ func (r *ReconcileRedisClusterBackup) ValidateBackup(backup *redisv1alpha1.Redis
 
 func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster) (*batchv1.Job, error) {
 	jobName := fmt.Sprintf("%s-%s", "redisbacup", backup.Name)
-	jobLabel := backup.GetLabels()
-	if jobLabel == nil {
-		jobLabel = map[string]string{}
+	jobLabel := map[string]string{
+		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
+		redisv1alpha1.AnnotationJobType: redisv1alpha1.JobTypeBackup,
 	}
 	backupSpec := backup.Spec.Backend
 	bucket, err := backupSpec.Container()
 	if err != nil {
 		return nil, err
 	}
-
-	dumpArgs := []string{"--all-databases"}
 
 	persistentVolume, err := r.GetVolumeForBackup(backup.Spec.Storage, jobName, backup.Namespace)
 	if err != nil {
@@ -261,17 +271,17 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  redisv1alpha1.JobTypeBackup,
-							Image: backup.Spec.Image,
-							Args: append([]string{
+							Name:            redisv1alpha1.JobTypeBackup,
+							Image:           backup.Spec.Image,
+							ImagePullPolicy: "Always",
+							Args: []string{
 								redisv1alpha1.JobTypeBackup,
 								fmt.Sprintf(`--data-dir=%s`, backupDumpDir),
 								fmt.Sprintf(`--bucket=%s`, bucket),
 								fmt.Sprintf(`--folder=%s`, folderName),
-								fmt.Sprintf(`--backup=%s`, backup.Name),
+								fmt.Sprintf(`--snapshot=%s`, backup.Name),
 								fmt.Sprintf(`--enable-analytics=%v`, "false"),
-								"--",
-							}, dumpArgs...),
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      persistentVolume.Name,
@@ -367,4 +377,57 @@ func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(storage *redisv1alpha1.
 	}
 
 	return volume, nil
+}
+
+func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, backup *redisv1alpha1.RedisClusterBackup) error {
+	match := client.MatchingLabels{
+		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
+		redisv1alpha1.AnnotationJobType: redisv1alpha1.JobTypeBackup,
+	}
+	jobs, err := r.jobController.ListJobByLabels(backup.Namespace, match)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	jobNum := len(jobs.Items)
+	reqLogger.V(3).Info("Handle Backup Job", "jobNum", jobNum)
+	jobSucceededNum := 0
+	for _, job := range jobs.Items {
+		if job.Status.Succeeded > 0 {
+			jobSucceededNum++
+		}
+	}
+
+	if jobNum == jobSucceededNum {
+		backup.Status.Phase = redisv1alpha1.BackupPhaseSucceeded
+	} else {
+		backup.Status.Phase = redisv1alpha1.BackupPhaseFailed
+	}
+	t := metav1.Now()
+	backup.Status.CompletionTime = &t
+	if err := r.crController.UpdateCRStatus(backup); err != nil {
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupError,
+			err.Error(),
+		)
+		return err
+	}
+
+	//delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+	//if err := r.crController.UpdateCR(backup); err != nil {
+	//	r.recorder.Event(
+	//		backup,
+	//		corev1.EventTypeWarning,
+	//		event.BackupError,
+	//		err.Error(),
+	//	)
+	//	return err
+	//}
+
+	return nil
 }

@@ -53,7 +53,7 @@ func OSMSecretName(name string) string {
 func createSecret(client client.Client, secret *corev1.Secret) error {
 	ctx := context.TODO()
 	s := &corev1.Secret{}
-	err := client.Get(context.TODO(), types.NamespacedName{
+	err := client.Get(ctx, types.NamespacedName{
 		Namespace: secret.Namespace,
 		Name:      secret.Name,
 	}, s)
