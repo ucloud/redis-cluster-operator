@@ -10,12 +10,16 @@ spec:
     plural: redisclusterbackups
     singular: redisclusterbackup
     shortNames:
-      - rcbackup
+      - drcb
   scope: Namespaced
   additionalPrinterColumns:
     - JSONPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - JSONPath: .status.phase
+      description: The phase of redis cluster backup
+      name: Phase
+      type: string
   subresources:
     status: {}
   version: v1alpha1
