@@ -3,17 +3,18 @@ package redisclusterbackup
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/event"
 	"github.com/ucloud/redis-cluster-operator/pkg/osm"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
@@ -414,11 +415,16 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 	masterSize := int(cluster.Spec.MasterSize)
 	jobNum := len(jobs.Items)
 	reqLogger.V(3).Info("Handle Backup Job", "jobNum", jobNum, "masterNum", masterSize)
+	// wait all job start
 	if jobNum != masterSize {
-		return nil
+		return fmt.Errorf("wait for all job start")
 	}
 	jobSucceededNum := 0
 	for _, job := range jobs.Items {
+		// wait all job succeeded or failed
+		if job.Status.Succeeded == 0 && job.Status.Failed <= utils.Int32(job.Spec.BackoffLimit) {
+			return fmt.Errorf("wait for jobs succeeded or failed")
+		}
 		if job.Status.Succeeded > 0 {
 			jobSucceededNum++
 		}
@@ -428,6 +434,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		backup.Status.Phase = redisv1alpha1.BackupPhaseSucceeded
 	} else {
 		backup.Status.Phase = redisv1alpha1.BackupPhaseFailed
+		backup.Status.Reason = "run batch job failed"
 	}
 	t := metav1.Now()
 	backup.Status.CompletionTime = &t
