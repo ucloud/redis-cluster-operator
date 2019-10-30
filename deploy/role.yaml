@@ -21,6 +21,7 @@ rules:
       - secrets
       - services
       - events
+      - persistentvolumeclaims
     verbs:
       - create
       - get
