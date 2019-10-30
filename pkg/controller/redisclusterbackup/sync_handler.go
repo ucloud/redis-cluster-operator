@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -201,6 +202,27 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		if node.Role == redisv1alpha1.RedisClusterNodeRoleMaster {
 			createJob := job.DeepCopy()
 			name := fmt.Sprintf("redisbacup-%s-%d", backup.Name, i)
+			if backup.Spec.Storage != nil && backup.Spec.Storage.Type == redisv1alpha1.PersistentClaim {
+				if err := r.createPVCForBackup(backup, name); err != nil {
+					return err
+				}
+				createJob.Spec.Template.Spec.Volumes = append(createJob.Spec.Template.Spec.Volumes, corev1.Volume{
+					Name: UtilVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: name,
+						},
+					},
+				})
+
+			} else {
+				createJob.Spec.Template.Spec.Volumes = append(createJob.Spec.Template.Spec.Volumes, corev1.Volume{
+					Name: UtilVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				})
+			}
 			// Folder name inside Cloud bucket where backup will be uploaded
 			folderName, err := backup.Location()
 			if err != nil {
@@ -258,11 +280,6 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 		return nil, err
 	}
 
-	persistentVolume, err := r.GetVolumeForBackup(backup.Spec.Storage, jobName, backup.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -297,7 +314,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 							Lifecycle:      backup.Spec.PodSpec.Lifecycle,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      persistentVolume.Name,
+									Name:      UtilVolumeName,
 									MountPath: backupDumpDir,
 								},
 								{
@@ -309,10 +326,6 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 						},
 					},
 					Volumes: []corev1.Volume{
-						{
-							Name:         persistentVolume.Name,
-							VolumeSource: persistentVolume.VolumeSource,
-						},
 						{
 							Name: "osmconfig",
 							VolumeSource: corev1.VolumeSource{
@@ -355,7 +368,8 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(backup *redisv1alpha1.RedisCl
 
 // GetVolumeForBackup returns pvc or empty directory depending on StorageType.
 // In case of PVC, this function will create a PVC then returns the volume.
-func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(storage *redisv1alpha1.RedisStorage, jobName, namespace string) (*corev1.Volume, error) {
+func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(backup *redisv1alpha1.RedisClusterBackup, jobName string) (*corev1.Volume, error) {
+	storage := backup.Spec.Storage
 	if storage == nil || storage.Type == redisv1alpha1.Ephemeral {
 		ed := corev1.EmptyDirVolumeSource{}
 		return &corev1.Volume{
@@ -369,35 +383,58 @@ func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(storage *redisv1alpha1.
 	volume := &corev1.Volume{
 		Name: UtilVolumeName,
 	}
-	mode := corev1.PersistentVolumeFilesystem
-	pvcSpec := &corev1.PersistentVolumeClaimSpec{
-		AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceStorage: storage.Size,
-			},
-		},
-		StorageClassName: &storage.Class,
-		VolumeMode:       &mode,
-	}
-
-	claim := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: namespace,
-		},
-		Spec: *pvcSpec,
-	}
-
-	if err := r.client.Create(context.TODO(), claim); err != nil {
-		return nil, err
-	}
 
 	volume.PersistentVolumeClaim = &corev1.PersistentVolumeClaimVolumeSource{
-		ClaimName: claim.Name,
+		ClaimName: jobName,
 	}
 
 	return volume, nil
+}
+
+func (r *ReconcileRedisClusterBackup) createPVCForBackup(backup *redisv1alpha1.RedisClusterBackup, jobName string) error {
+	getClaim := &corev1.PersistentVolumeClaim{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: backup.Namespace,
+		Name:      jobName,
+	}, getClaim)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			storage := backup.Spec.Storage
+			mode := corev1.PersistentVolumeFilesystem
+			pvcSpec := &corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storage.Size,
+					},
+				},
+				StorageClassName: &storage.Class,
+				VolumeMode:       &mode,
+			}
+
+			claim := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      jobName,
+					Namespace: backup.Namespace,
+				},
+				Spec: *pvcSpec,
+			}
+			if storage.DeleteClaim {
+				claim.OwnerReferences = []metav1.OwnerReference{
+					{
+						APIVersion: redisv1alpha1.SchemeGroupVersion.String(),
+						Kind:       redisv1alpha1.RedisClusterBackupKind,
+						Name:       backup.Name,
+						UID:        backup.UID,
+					},
+				}
+			}
+
+			return r.client.Create(context.TODO(), claim)
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, backup *redisv1alpha1.RedisClusterBackup) error {
