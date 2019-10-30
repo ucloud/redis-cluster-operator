@@ -101,7 +101,7 @@ case "$op" in
   backup)
     echo "Dumping database......"
     redis-cli --rdb dump.rdb -h ${REDIS_HOST} -a "${REDIS_PASSWORD}"
-
+    redis-cli -h ${REDIS_HOST} -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
     echo "Uploading dump file to the backend......."
     osm push --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_DATA_DIR" "$REDIS_FOLDER/$REDIS_SNAPSHOT"
 
