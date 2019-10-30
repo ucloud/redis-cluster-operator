@@ -448,6 +448,36 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		return err
 	}
 
+	if jobNum == jobSucceededNum {
+		msg := "Successfully completed backup"
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeNormal,
+			event.BackupSuccessful,
+			msg,
+		)
+		r.recorder.Event(
+			cluster,
+			corev1.EventTypeNormal,
+			event.BackupSuccessful,
+			msg,
+		)
+	} else {
+		msg := "Failed to complete backup"
+		r.recorder.Event(
+			backup,
+			corev1.EventTypeWarning,
+			event.BackupFailed,
+			msg,
+		)
+		r.recorder.Event(
+			cluster,
+			corev1.EventTypeWarning,
+			event.BackupFailed,
+			msg,
+		)
+	}
+
 	//delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
 	//if err := r.crController.UpdateCR(backup); err != nil {
 	//	r.recorder.Event(
