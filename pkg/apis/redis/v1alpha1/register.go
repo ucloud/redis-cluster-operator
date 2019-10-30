@@ -12,6 +12,7 @@ import (
 
 const (
 	DistributedRedisClusterKind = "DistributedRedisCluster"
+	RedisClusterBackupKind      = "RedisClusterBackup"
 )
 
 var (

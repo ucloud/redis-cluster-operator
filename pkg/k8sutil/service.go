@@ -52,8 +52,5 @@ func (s *serviceController) GetService(namespace, name string) (*corev1.Service,
 		Name:      name,
 		Namespace: namespace,
 	}, svc)
-	if err != nil {
-		return nil, err
-	}
 	return svc, err
 }

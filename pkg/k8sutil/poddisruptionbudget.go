@@ -52,8 +52,5 @@ func (s *PodDisruptionBudgetController) GetPodDisruptionBudget(namespace, name s
 		Name:      name,
 		Namespace: namespace,
 	}, pb)
-	if err != nil {
-		return nil, err
-	}
 	return pb, err
 }
