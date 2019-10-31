@@ -50,7 +50,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: cluster.Annotations,
+					Annotations: cluster.Spec.Annotations,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:        getAffinity(spec.Affinity, labels),
