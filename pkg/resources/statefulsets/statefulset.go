@@ -49,7 +49,8 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.Annotations,
 				},
 				Spec: corev1.PodSpec{
 					Affinity:        getAffinity(spec.Affinity, labels),
@@ -73,6 +74,9 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 			// set an owner reference so the persistent volumes are deleted when the cluster be deleted.
 			ss.Spec.VolumeClaimTemplates[0].OwnerReferences = redisv1alpha1.DefaultOwnerReferences(cluster)
 		}
+	}
+	if spec.Monitor != nil {
+		ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, redisExporterContainer(cluster, password))
 	}
 	return ss
 }
@@ -212,6 +216,32 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		container.Env = append(container.Env, *password)
 	}
 
+	return container
+}
+
+func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
+	container := corev1.Container{
+		Name: "exporter",
+		Args: append([]string{
+			fmt.Sprintf("--web.listen-address=:%v", cluster.Spec.Monitor.Prometheus.Port),
+			fmt.Sprintf("--web.telemetry-path=%v", redisv1alpha1.PrometheusExporterTelemetryPath),
+		}, cluster.Spec.Monitor.Args...),
+		Image:           cluster.Spec.Monitor.Image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "prom-http",
+				Protocol:      corev1.ProtocolTCP,
+				ContainerPort: cluster.Spec.Monitor.Prometheus.Port,
+			},
+		},
+		Env:             cluster.Spec.Monitor.Env,
+		Resources:       cluster.Spec.Monitor.Resources,
+		SecurityContext: cluster.Spec.Monitor.SecurityContext,
+	}
+	if password != nil {
+		container.Env = append(container.Env, *password)
+	}
 	return container
 }
 
