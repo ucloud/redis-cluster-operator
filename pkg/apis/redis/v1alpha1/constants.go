@@ -71,4 +71,7 @@ const (
 
 	JobTypeBackup  = "backup"
 	JobTypeRestore = "restore"
+
+	PrometheusExporterPortNumber    = 9100
+	PrometheusExporterTelemetryPath = "/metrics"
 )

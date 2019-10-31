@@ -36,6 +36,23 @@ func (in *DistributedRedisCluster) Validate() {
 	if in.Spec.Resources == nil || in.Spec.Resources.Size() == 0 {
 		in.Spec.Resources = defaultResource()
 	}
+
+	mon := in.Spec.Monitor
+	if mon != nil {
+		if mon.Prometheus == nil {
+			mon.Prometheus = &PrometheusSpec{}
+		}
+		if mon.Prometheus.Port == 0 {
+			mon.Prometheus.Port = PrometheusExporterPortNumber
+		}
+		if in.Spec.Annotations == nil {
+			in.Spec.Annotations = make(map[string]string)
+		}
+
+		in.Spec.Annotations["prometheus.io/scrape"] = "true"
+		in.Spec.Annotations["prometheus.io/path"] = PrometheusExporterTelemetryPath
+		in.Spec.Annotations["prometheus.io/port"] = fmt.Sprintf("%d", mon.Prometheus.Port)
+	}
 }
 
 func defaultResource() *v1.ResourceRequirements {
