@@ -74,7 +74,7 @@ type PrometheusSpec struct {
 	Labels map[string]string `json:"labels,omitempty"`
 
 	// Interval at which metrics should be scraped
-	Interval    string            `json:"interval,omitempty"`
+	Interval string `json:"interval,omitempty"`
 	//Annotations map[string]string `json:"annotations,omitempty"`
 }
 

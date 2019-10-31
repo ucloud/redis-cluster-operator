@@ -30,15 +30,11 @@ func SetClusterScaling(status *redisv1alpha1.DistributedRedisClusterStatus, reas
 	status.Reason = reason
 }
 
-func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod) *redisv1alpha1.DistributedRedisClusterStatus {
-	status := &redisv1alpha1.DistributedRedisClusterStatus{}
-	//if err == nil {
-	//	status.Status = redisv1alpha1.ClusterStatusOK
-	//	status.Reason = "OK"
-	//} else {
-	//	status.Status = redisv1alpha1.ClusterStatusKO
-	//	status.Reason = err.Error()
-	//}
+func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod, oldStatus *redisv1alpha1.DistributedRedisClusterStatus) *redisv1alpha1.DistributedRedisClusterStatus {
+	status := &redisv1alpha1.DistributedRedisClusterStatus{
+		Status: oldStatus.Status,
+		Reason: oldStatus.Reason,
+	}
 
 	nbMaster := int32(0)
 	nbSlaveByMaster := map[string]int{}
@@ -98,18 +94,6 @@ func (r *ReconcileDistributedRedisCluster) updateClusterIfNeed(cluster *redisv1a
 }
 
 func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus) bool {
-	if old.Status != new.Status || old.Reason != new.Reason {
-		return true
-	}
-
-	if old.NumberOfMaster != new.NumberOfMaster {
-		return true
-	}
-
-	if len(old.Nodes) != len(new.Nodes) {
-		return true
-	}
-
 	if compareStringValue("ClusterStatus", string(old.Status), string(new.Status)) {
 		return true
 	}
