@@ -23,6 +23,15 @@ func (r *ReconcileRedisClusterBackup) markAsFailedBackup(backup *redisv1alpha1.R
 	return r.crController.UpdateCRStatus(backup)
 }
 
+func (r *ReconcileRedisClusterBackup) markAsIgnoredBackup(backup *redisv1alpha1.RedisClusterBackup,
+	reason string) error {
+	t := metav1.Now()
+	backup.Status.CompletionTime = &t
+	backup.Status.Phase = redisv1alpha1.BackupPhaseIgnored
+	backup.Status.Reason = reason
+	return r.crController.UpdateCRStatus(backup)
+}
+
 func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.RedisClusterBackup) (bool, error) {
 	labMap := client.MatchingLabels{
 		redisv1alpha1.LabelBackupStatus: string(redisv1alpha1.BackupPhaseRunning),

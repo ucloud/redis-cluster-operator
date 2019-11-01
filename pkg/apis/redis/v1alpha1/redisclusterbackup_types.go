@@ -143,6 +143,8 @@ const (
 	BackupPhaseSucceeded BackupPhase = "Succeeded"
 	// used for Backup that are Failed
 	BackupPhaseFailed BackupPhase = "Failed"
+	// used for Backup that are Ignored
+	BackupPhaseIgnored BackupPhase = "Ignored"
 )
 
 // RedisClusterBackupStatus defines the observed state of RedisClusterBackup
