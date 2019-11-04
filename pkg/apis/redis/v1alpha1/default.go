@@ -98,7 +98,7 @@ func (in *RedisClusterBackup) Validate() error {
 
 func (in *RedisClusterBackup) Location() (string, error) {
 	spec := in.Spec.Backend
-	timePrefix := in.Status.StartTime.Format("200601020304")
+	timePrefix := in.Status.StartTime.Format("20060102150405")
 	if spec.S3 != nil {
 		return filepath.Join(spec.S3.Prefix, DatabaseNamePrefix, in.Namespace, in.Spec.RedisClusterName, timePrefix), nil
 	} else if spec.GCS != nil {
