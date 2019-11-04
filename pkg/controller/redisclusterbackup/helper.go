@@ -23,12 +23,20 @@ func (r *ReconcileRedisClusterBackup) markAsFailedBackup(backup *redisv1alpha1.R
 	return r.crController.UpdateCRStatus(backup)
 }
 
+func (r *ReconcileRedisClusterBackup) markAsIgnoredBackup(backup *redisv1alpha1.RedisClusterBackup,
+	reason string) error {
+	t := metav1.Now()
+	backup.Status.CompletionTime = &t
+	backup.Status.Phase = redisv1alpha1.BackupPhaseIgnored
+	backup.Status.Reason = reason
+	return r.crController.UpdateCRStatus(backup)
+}
+
 func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.RedisClusterBackup) (bool, error) {
 	labMap := client.MatchingLabels{
 		redisv1alpha1.LabelBackupStatus: string(redisv1alpha1.BackupPhaseRunning),
 		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
 	}
-
 	backupList := &redisv1alpha1.RedisClusterBackupList{}
 	opts := []client.ListOption{
 		client.InNamespace(backup.Namespace),
@@ -39,7 +47,16 @@ func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.Redi
 		return false, err
 	}
 
-	if len(backupList.Items) > 0 {
+	jobLabMap := client.MatchingLabels{
+		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
+		redisv1alpha1.AnnotationJobType: redisv1alpha1.JobTypeBackup,
+	}
+	backupJobList, err := r.jobController.ListJobByLabels(backup.Namespace, jobLabMap)
+	if err != nil {
+		return false, err
+	}
+
+	if len(backupList.Items) > 0 && len(backupJobList.Items) > 0 {
 		return true, nil
 	}
 

@@ -83,7 +83,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			job := e.Object.(*batch.Job)
-			if job.Status.Succeeded > 0 || job.Status.Failed > utils.Int32(job.Spec.BackoffLimit) {
+			if job.Status.Succeeded > 0 || job.Status.Failed >= utils.Int32(job.Spec.BackoffLimit) {
 				return true
 			}
 			return false
@@ -150,7 +150,7 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 			// Run finalization logic for backupFinalizer. If the
 			// finalization logic fails, don't remove the finalizer so
 			// that we can retry during the next reconciliation.
-			if err := r.finalizeMemcached(reqLogger, instance); err != nil {
+			if err := r.finalizeBackup(reqLogger, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -179,7 +179,7 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileRedisClusterBackup) finalizeMemcached(reqLogger logr.Logger, b *redisv1alpha1.RedisClusterBackup) error {
+func (r *ReconcileRedisClusterBackup) finalizeBackup(reqLogger logr.Logger, b *redisv1alpha1.RedisClusterBackup) error {
 	// TODO(user): Add the cleanup steps that the operator
 	// needs to do before the CR can be deleted. Examples
 	// of finalizers include performing backups and deleting
@@ -189,7 +189,7 @@ func (r *ReconcileRedisClusterBackup) finalizeMemcached(reqLogger logr.Logger, b
 }
 
 func (r *ReconcileRedisClusterBackup) addFinalizer(reqLogger logr.Logger, b *redisv1alpha1.RedisClusterBackup) error {
-	reqLogger.Info("Adding Finalizer for the Memcached")
+	reqLogger.Info("Adding Finalizer for the backup")
 	b.SetFinalizers(append(b.GetFinalizers(), backupFinalizer))
 
 	// Update CR
