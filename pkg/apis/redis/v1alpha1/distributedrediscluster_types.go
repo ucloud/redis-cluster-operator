@@ -30,6 +30,7 @@ type DistributedRedisClusterSpec struct {
 	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
 	PasswordSecret  *corev1.LocalObjectReference `json:"rootPasswordSecret,omitempty"`
 	Monitor         *AgentSpec                   `json:"monitor,omitempty"`
+	Init            *InitSpec                    `json:"init,omitempty"`
 }
 
 type AgentSpec struct {
@@ -76,6 +77,17 @@ type PrometheusSpec struct {
 	// Interval at which metrics should be scraped
 	Interval string `json:"interval,omitempty"`
 	//Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type InitSpec struct {
+	BackupSource *BackupSourceSpec `json:"snapshotSource,omitempty"`
+}
+
+type BackupSourceSpec struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	// Arguments to the restore job
+	Args []string `json:"args,omitempty"`
 }
 
 // RedisStorage defines the structure used to store the Redis Data

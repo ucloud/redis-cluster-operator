@@ -159,6 +159,8 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 	}
 
 	backup.Status.Phase = redisv1alpha1.BackupPhaseRunning
+	backup.Status.MasterSize = cluster.Spec.MasterSize
+	backup.Status.ClusterReplicas = cluster.Spec.ClusterReplicas
 	if err := r.crController.UpdateCRStatus(backup); err != nil {
 		r.recorder.Event(
 			backup,
@@ -169,7 +171,6 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	// TODO: fix update labels succeed but create job err
 	backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
 	backup.Labels[redisv1alpha1.LabelBackupStatus] = string(redisv1alpha1.BackupPhaseRunning)
 	if err := r.crController.UpdateCR(backup); err != nil {

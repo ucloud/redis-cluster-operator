@@ -151,10 +151,12 @@ const (
 // +k8s:openapi-gen=true
 type RedisClusterBackupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	StartTime      *metav1.Time `json:"startTime,omitempty"`
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-	Phase          BackupPhase  `json:"phase,omitempty"`
-	Reason         string       `json:"reason,omitempty"`
+	StartTime       *metav1.Time `json:"startTime,omitempty"`
+	CompletionTime  *metav1.Time `json:"completionTime,omitempty"`
+	Phase           BackupPhase  `json:"phase,omitempty"`
+	Reason          string       `json:"reason,omitempty"`
+	MasterSize      int32        `json:"masterSize,omitempty"`
+	ClusterReplicas int32        `json:"clusterReplicas,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
