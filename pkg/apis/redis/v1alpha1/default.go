@@ -118,5 +118,5 @@ func (in *RedisClusterBackup) OSMSecretName() string {
 }
 
 func (in *RedisClusterBackup) JobName() string {
-	return fmt.Sprintf("redisbacup-%v", in.Name)
+	return fmt.Sprintf("redisbackup-%v", in.Name)
 }
