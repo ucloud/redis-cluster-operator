@@ -37,8 +37,10 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		}
 	}
 
-	// Do not process "completed", aka "failed" or "succeeded", backups.
-	if backup.Status.Phase == redisv1alpha1.BackupPhaseFailed || backup.Status.Phase == redisv1alpha1.BackupPhaseSucceeded {
+	// Do not process "completed", aka "failed" or "succeeded" or "ignored", backups.
+	if backup.Status.Phase == redisv1alpha1.BackupPhaseFailed ||
+		backup.Status.Phase == redisv1alpha1.BackupPhaseSucceeded ||
+		backup.Status.Phase == redisv1alpha1.BackupPhaseIgnored {
 		delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
 		if err := r.crController.UpdateCR(backup); err != nil {
 			r.recorder.Event(
@@ -167,6 +169,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
+	// TODO: fix update labels succeed but create job err
 	backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
 	backup.Labels[redisv1alpha1.LabelBackupStatus] = string(redisv1alpha1.BackupPhaseRunning)
 	if err := r.crController.UpdateCR(backup); err != nil {
@@ -179,6 +182,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
+	reqLogger.V(4).Info("Backup running")
 	r.recorder.Event(
 		backup,
 		corev1.EventTypeNormal,
@@ -434,6 +438,18 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 	reqLogger.Info("Handle Backup Job")
 	job, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
 	if err != nil {
+		if errors.IsNotFound(err) {
+			msg := "One Backup is already Running"
+			reqLogger.Info(msg)
+			r.markAsIgnoredBackup(backup, msg)
+			r.recorder.Event(
+				backup,
+				corev1.EventTypeWarning,
+				event.BackupFailed,
+				msg,
+			)
+			return nil
+		}
 		return err
 	}
 	if job.Status.Succeeded == 0 && job.Status.Failed <= utils.Int32(job.Spec.BackoffLimit) {

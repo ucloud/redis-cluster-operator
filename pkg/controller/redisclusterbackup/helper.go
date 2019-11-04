@@ -37,7 +37,6 @@ func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.Redi
 		redisv1alpha1.LabelBackupStatus: string(redisv1alpha1.BackupPhaseRunning),
 		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
 	}
-
 	backupList := &redisv1alpha1.RedisClusterBackupList{}
 	opts := []client.ListOption{
 		client.InNamespace(backup.Namespace),
@@ -48,7 +47,16 @@ func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.Redi
 		return false, err
 	}
 
-	if len(backupList.Items) > 0 {
+	jobLabMap := client.MatchingLabels{
+		redisv1alpha1.LabelClusterName:  backup.Spec.RedisClusterName,
+		redisv1alpha1.AnnotationJobType: redisv1alpha1.JobTypeBackup,
+	}
+	backupJobList, err := r.jobController.ListJobByLabels(backup.Namespace, jobLabMap)
+	if err != nil {
+		return false, err
+	}
+
+	if len(backupList.Items) > 0 && len(backupJobList.Items) > 0 {
 		return true, nil
 	}
 
