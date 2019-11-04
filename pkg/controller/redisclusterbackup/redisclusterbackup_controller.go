@@ -83,7 +83,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			job := e.Object.(*batch.Job)
-			if job.Status.Succeeded > 0 || job.Status.Failed > utils.Int32(job.Spec.BackoffLimit) {
+			if job.Status.Succeeded > 0 || job.Status.Failed >= utils.Int32(job.Spec.BackoffLimit) {
 				return true
 			}
 			return false

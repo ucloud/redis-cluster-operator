@@ -281,18 +281,10 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 		},
 	}
 	if backup.Spec.Backend.Local != nil {
-		job.Spec.Template.Spec.Containers[0].VolumeMounts = append(job.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "local",
-			MountPath: backup.Spec.Backend.Local.MountPath,
-			SubPath:   backup.Spec.Backend.Local.SubPath,
-		})
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name:         "local",
 			VolumeSource: backup.Spec.Backend.Local.VolumeSource,
 		})
-	}
-	if cluster.Spec.PasswordSecret != nil {
-		job.Spec.Template.Spec.Containers[0].Env = append(job.Spec.Template.Spec.Containers[0].Env, redisPassword(cluster))
 	}
 
 	return job, nil
@@ -351,6 +343,16 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 						MountPath: osm.SecretMountPath,
 					},
 				},
+			}
+			if cluster.Spec.PasswordSecret != nil {
+				container.Env = append(container.Env, redisPassword(cluster))
+			}
+			if backup.Spec.Backend.Local != nil {
+				container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+					Name:      "local",
+					MountPath: backup.Spec.Backend.Local.MountPath,
+					SubPath:   backup.Spec.Backend.Local.SubPath,
+				})
 			}
 			containers[i] = container
 			i++
@@ -452,7 +454,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		}
 		return err
 	}
-	if job.Status.Succeeded == 0 && job.Status.Failed <= utils.Int32(job.Spec.BackoffLimit) {
+	if job.Status.Succeeded == 0 && job.Status.Failed < utils.Int32(job.Spec.BackoffLimit) {
 		return fmt.Errorf("wait for job Succeeded or Failed")
 	}
 
