@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/osm"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/configmaps"
 )
 
@@ -24,9 +25,9 @@ const (
 )
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
-func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *appsv1.StatefulSet {
+func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (*appsv1.StatefulSet, error) {
 	password := redisPassword(cluster)
-	volumes := redisVolumes(cluster)
+	volumes := redisVolumes(cluster, backup)
 	name := ClusterStatefulSetName(cluster.Name)
 	namespace := cluster.Namespace
 	spec := cluster.Spec
@@ -78,7 +79,14 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels 
 	if spec.Monitor != nil {
 		ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, redisExporterContainer(cluster, password))
 	}
-	return ss
+	if spec.Init != nil {
+		initContainer, err := redisInitContainer(backup, password)
+		if err != nil {
+			return nil, err
+		}
+		ss.Spec.Template.Spec.InitContainers = append(ss.Spec.Template.Spec.InitContainers, initContainer)
+	}
+	return ss, nil
 }
 
 func getAffinity(affinity *corev1.Affinity, labels map[string]string) *corev1.Affinity {
@@ -245,6 +253,61 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 	return container
 }
 
+func redisInitContainer(backup *redisv1alpha1.RedisClusterBackup, password *corev1.EnvVar) (corev1.Container, error) {
+	backupSpec := backup.Spec.Backend
+	bucket, err := backupSpec.Container()
+	if err != nil {
+		return corev1.Container{}, err
+	}
+	folderName, err := backup.Location()
+	if err != nil {
+		return corev1.Container{}, err
+	}
+	container := corev1.Container{
+		Name:            redisv1alpha1.JobTypeRestore,
+		Image:           backup.Spec.Image,
+		ImagePullPolicy: "Always",
+		Args: []string{
+			redisv1alpha1.JobTypeRestore,
+			fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
+			fmt.Sprintf(`--bucket=%s`, bucket),
+			fmt.Sprintf(`--enable-analytics=%v`, "false"),
+			fmt.Sprintf(`--folder=%s`, folderName),
+			fmt.Sprintf(`--snapshot=%s`, backup.Name),
+			"--",
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+		},
+		Resources:      backup.Spec.PodSpec.Resources,
+		LivenessProbe:  backup.Spec.PodSpec.LivenessProbe,
+		ReadinessProbe: backup.Spec.PodSpec.ReadinessProbe,
+		Lifecycle:      backup.Spec.PodSpec.Lifecycle,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      redisStorageVolumeName,
+				MountPath: redisv1alpha1.BackupDumpDir,
+			},
+			{
+				Name:      "osmconfig",
+				ReadOnly:  true,
+				MountPath: osm.SecretMountPath,
+			},
+		},
+	}
+	if password != nil {
+		container.Env = append(container.Env, *password)
+	}
+	return container, nil
+}
+
 func volumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
@@ -278,7 +341,7 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVa
 	}
 }
 
-func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volume {
+func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup) []corev1.Volume {
 	executeMode := int32(0755)
 	volumes := []corev1.Volume{
 		{
@@ -297,6 +360,16 @@ func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volum
 	dataVolume := redisDataVolume(cluster)
 	if dataVolume != nil {
 		volumes = append(volumes, *dataVolume)
+	}
+	if cluster.Spec.Init != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: "osmconfig",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: backup.OSMSecretName(),
+				},
+			},
+		})
 	}
 	return volumes
 }

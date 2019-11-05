@@ -2,13 +2,9 @@ package redisclusterbackup
 
 import (
 	"context"
-	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -63,25 +59,6 @@ func (r *ReconcileRedisClusterBackup) isBackupRunning(backup *redisv1alpha1.Redi
 	return false, nil
 }
 
-func OSMSecretName(name string) string {
-	return fmt.Sprintf("osm-%v", name)
-}
-
-func createSecret(client client.Client, secret *corev1.Secret) error {
-	ctx := context.TODO()
-	s := &corev1.Secret{}
-	err := client.Get(ctx, types.NamespacedName{
-		Namespace: secret.Namespace,
-		Name:      secret.Name,
-	}, s)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return client.Create(ctx, secret)
-		}
-	}
-	return err
-}
-
 func upsertEnvVars(vars []corev1.EnvVar, nv ...corev1.EnvVar) []corev1.EnvVar {
 	upsert := func(env corev1.EnvVar) {
 		for i, v := range vars {
@@ -97,13 +74,6 @@ func upsertEnvVars(vars []corev1.EnvVar, nv ...corev1.EnvVar) []corev1.EnvVar {
 		upsert(env)
 	}
 	return vars
-}
-
-func IsRequestRetryable(err error) bool {
-	return kerr.IsServiceUnavailable(err) ||
-		kerr.IsTimeout(err) ||
-		kerr.IsServerTimeout(err) ||
-		kerr.IsTooManyRequests(err)
 }
 
 // Returns the REDIS_PASSWORD environment variable.

@@ -13,13 +13,9 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/event"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/osm"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
-)
-
-const (
-	backupDumpDir  = "/data"
-	UtilVolumeName = "util-volume"
 )
 
 func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redisv1alpha1.RedisClusterBackup) error {
@@ -69,7 +65,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 	//}
 
 	if err := r.ValidateBackup(backup); err != nil {
-		if IsRequestRetryable(err) {
+		if k8sutil.IsRequestRetryable(err) {
 			return err
 		}
 		r.markAsFailedBackup(backup, err.Error())
@@ -107,7 +103,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewOSMSecret(r.client, OSMSecretName(backup.Name), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewOSMSecret(r.client, k8sutil.OSMSecretName(backup.Name), backup.Namespace, backup.Spec.Backend)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)
@@ -120,7 +116,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return nil // don't retry
 	}
 
-	if err := createSecret(r.client, secret); err != nil {
+	if err := k8sutil.CreateSecret(r.client, secret); err != nil {
 		r.recorder.Event(
 			backup,
 			corev1.EventTypeWarning,
@@ -152,7 +148,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 			event.BackupError,
 			message,
 		)
-		if IsRequestRetryable(err) {
+		if k8sutil.IsRequestRetryable(err) {
 			return err
 		}
 		return r.markAsFailedBackup(backup, message)
@@ -161,6 +157,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 	backup.Status.Phase = redisv1alpha1.BackupPhaseRunning
 	backup.Status.MasterSize = cluster.Spec.MasterSize
 	backup.Status.ClusterReplicas = cluster.Spec.ClusterReplicas
+	backup.Status.ClusterImage = cluster.Spec.Image
 	if err := r.crController.UpdateCRStatus(backup); err != nil {
 		r.recorder.Event(
 			backup,
@@ -321,7 +318,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				ImagePullPolicy: "Always",
 				Args: []string{
 					redisv1alpha1.JobTypeBackup,
-					fmt.Sprintf(`--data-dir=%s`, backupDumpDir),
+					fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
 					fmt.Sprintf(`--bucket=%s`, bucket),
 					fmt.Sprintf(`--enable-analytics=%v`, "false"),
 					fmt.Sprintf(`--host=%s`, node.IP),
@@ -335,8 +332,8 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				Lifecycle:      backup.Spec.PodSpec.Lifecycle,
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name:      UtilVolumeName,
-						MountPath: backupDumpDir,
+						Name:      redisv1alpha1.UtilVolumeName,
+						MountPath: redisv1alpha1.BackupDumpDir,
 					},
 					{
 						Name:      "osmconfig",
@@ -369,7 +366,7 @@ func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(backup *redisv1alpha1.R
 	if storage == nil || storage.Type == redisv1alpha1.Ephemeral {
 		ed := corev1.EmptyDirVolumeSource{}
 		return &corev1.Volume{
-			Name: UtilVolumeName,
+			Name: redisv1alpha1.UtilVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &ed,
 			},
@@ -377,7 +374,7 @@ func (r *ReconcileRedisClusterBackup) GetVolumeForBackup(backup *redisv1alpha1.R
 	}
 
 	volume := &corev1.Volume{
-		Name: UtilVolumeName,
+		Name: redisv1alpha1.UtilVolumeName,
 	}
 
 	if err := r.createPVCForBackup(backup, jobName); err != nil {

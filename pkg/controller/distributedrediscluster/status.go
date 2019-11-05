@@ -89,7 +89,7 @@ func (r *ReconcileDistributedRedisCluster) updateClusterIfNeed(cluster *redisv1a
 		log.WithValues("namespace", cluster.Namespace, "name", cluster.Name).
 			V(3).Info("status changed")
 		cluster.Status = *newStatus
-		r.clusterStatusController.UpdateCRStatus(cluster)
+		r.crController.UpdateCRStatus(cluster)
 	}
 }
 

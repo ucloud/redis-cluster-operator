@@ -21,9 +21,9 @@ func (in *DistributedRedisCluster) Validate() {
 		in.Spec.MasterSize = minMasterSize
 	}
 
-	if in.Spec.ClusterReplicas < minClusterReplicas {
-		in.Spec.ClusterReplicas = minClusterReplicas
-	}
+	//if in.Spec.ClusterReplicas < minClusterReplicas {
+	//	in.Spec.ClusterReplicas = minClusterReplicas
+	//}
 
 	if in.Spec.Image == "" {
 		in.Spec.Image = defaultRedisImage

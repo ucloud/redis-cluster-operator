@@ -157,6 +157,7 @@ type RedisClusterBackupStatus struct {
 	Reason          string       `json:"reason,omitempty"`
 	MasterSize      int32        `json:"masterSize,omitempty"`
 	ClusterReplicas int32        `json:"clusterReplicas,omitempty"`
+	ClusterImage    string       `json:"clusterImage,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
