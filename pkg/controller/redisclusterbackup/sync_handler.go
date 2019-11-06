@@ -438,9 +438,10 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 	reqLogger.Info("Handle Backup Job")
 	job, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
 	if err != nil {
+		// TODO: Sometimes the job is created successfully, but it cannot be obtained immediately.
 		if errors.IsNotFound(err) {
 			msg := "One Backup is already Running"
-			reqLogger.Info(msg)
+			reqLogger.Info(msg, "err", err)
 			r.markAsIgnoredBackup(backup, msg)
 			r.recorder.Event(
 				backup,
@@ -530,7 +531,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 				}
 			} else {
 				msg := "One Backup is already Running"
-				reqLogger.Info(msg)
+				reqLogger.Info(msg, o.Name, backup.Name)
 				r.markAsIgnoredBackup(backup, msg)
 				r.recorder.Event(
 					backup,
