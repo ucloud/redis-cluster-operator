@@ -80,7 +80,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, backup 
 		ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, redisExporterContainer(cluster, password))
 	}
 	if spec.Init != nil {
-		initContainer, err := redisInitContainer(backup, password)
+		initContainer, err := redisInitContainer(cluster, backup, password)
 		if err != nil {
 			return nil, err
 		}
@@ -253,7 +253,7 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 	return container
 }
 
-func redisInitContainer(backup *redisv1alpha1.RedisClusterBackup, password *corev1.EnvVar) (corev1.Container, error) {
+func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup, password *corev1.EnvVar) (corev1.Container, error) {
 	backupSpec := backup.Spec.Backend
 	bucket, err := backupSpec.Container()
 	if err != nil {
@@ -282,6 +282,17 @@ func redisInitContainer(backup *redisv1alpha1.RedisClusterBackup, password *core
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name: "REDIS_RESTORE_SUCCEEDED",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: configmaps.RestoreConfigMapName(cluster.Name),
+						},
+						Key: configmaps.RestoreSucceeded,
 					},
 				},
 			},

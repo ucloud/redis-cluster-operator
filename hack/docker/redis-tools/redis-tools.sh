@@ -29,6 +29,7 @@ REDIS_BUCKET=${REDIS_BUCKET:-}
 REDIS_FOLDER=${REDIS_FOLDER:-}
 REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
+REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
 OSM_CONFIG_FILE=/etc/osm/config
 ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-false}
 
@@ -109,6 +110,10 @@ case "$op" in
     ;;
   restore)
     echo "Pulling backup file from the backend"
+    if [ "${REDIS_RESTORE_SUCCEEDED}" == "1" ];then
+      echo "Has been restored successfully"
+      exit 0
+    fi
     index=$(echo "${POD_NAME}" | awk -F- '{print $NF}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
     osm pull --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR"

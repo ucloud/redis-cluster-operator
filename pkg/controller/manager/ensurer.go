@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"strconv"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -100,20 +102,40 @@ func (r *realEnsureResource) EnsureRedisHeadLessSvc(cluster *redisv1alpha1.Distr
 func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	cmName := configmaps.RedisConfigMapName(cluster.Name)
 	_, err := r.configMapClient.GetConfigMap(cluster.Namespace, cmName)
-	if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
-			Info("creating a new configMap")
-		cm := configmaps.NewConfigMapForCR(cluster, labels)
-		return r.configMapClient.CreateConfigMap(cm)
-	} else if err != nil {
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
+				Info("creating a new configMap")
+			cm := configmaps.NewConfigMapForCR(cluster, labels)
+			return r.configMapClient.CreateConfigMap(cm)
+		}
 		return err
+
+	}
+
+	if cluster.Spec.Init != nil {
+		restoreCmName := configmaps.RestoreConfigMapName(cluster.Name)
+		restoreCm, err := r.configMapClient.GetConfigMap(cluster.Namespace, restoreCmName)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
+					Info("creating a new restore configMap")
+				cm := configmaps.NewConfigMapForRestore(cluster, labels)
+				return r.configMapClient.CreateConfigMap(cm)
+			}
+			return err
+		}
+		if restoreCm.Data[configmaps.RestoreSucceeded] != strconv.Itoa(int(cluster.Status.RestoreSucceeded)) {
+			cm := configmaps.NewConfigMapForRestore(cluster, labels)
+			return r.configMapClient.UpdateConfigMap(cm)
+		}
 	}
 	return nil
 }
 
 func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster,
 	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
-	if cluster.Spec.Init == nil {
+	if cluster.Spec.Init == nil || cluster.Status.RestoreSucceeded > 0 {
 		return nil
 	}
 	secret, err := osm.NewOSMSecret(r.client, k8sutil.OSMSecretName(backup.Name), backup.Namespace, backup.Spec.Backend)

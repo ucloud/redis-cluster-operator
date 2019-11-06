@@ -32,8 +32,9 @@ func SetClusterScaling(status *redisv1alpha1.DistributedRedisClusterStatus, reas
 
 func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod, oldStatus *redisv1alpha1.DistributedRedisClusterStatus) *redisv1alpha1.DistributedRedisClusterStatus {
 	status := &redisv1alpha1.DistributedRedisClusterStatus{
-		Status: oldStatus.Status,
-		Reason: oldStatus.Reason,
+		Status:           oldStatus.Status,
+		Reason:           oldStatus.Reason,
+		RestoreSucceeded: oldStatus.RestoreSucceeded,
 	}
 
 	nbMaster := int32(0)
@@ -107,6 +108,10 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus) bool {
 	}
 
 	if compareInts("len(Nodes)", int32(len(old.Nodes)), int32(len(new.Nodes))) {
+		return true
+	}
+
+	if compareInts("restoreSucceeded", old.RestoreSucceeded, new.RestoreSucceeded) {
 		return true
 	}
 

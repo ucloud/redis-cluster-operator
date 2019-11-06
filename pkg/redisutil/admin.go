@@ -140,7 +140,7 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 		if nodeinfos.Node != nil && nodeinfos.Node.IPPort() == addr {
 			infos.Infos[addr] = nodeinfos
 		} else {
-			log.Info("bad node info retrieved from ", addr)
+			log.Info("bad node info retrieved from", "addr", addr)
 		}
 	}
 

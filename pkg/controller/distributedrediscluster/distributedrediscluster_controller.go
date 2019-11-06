@@ -176,6 +176,19 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, err
 	}
 
+	// update cr and wait for the next Reconcile loop
+	if instance.Spec.Init != nil && instance.Status.RestoreSucceeded <= 0 {
+		reqLogger.Info("update restore redis cluster cr")
+		instance.Status.RestoreSucceeded = 1
+		if err := r.crController.UpdateCRStatus(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		if err := r.crController.UpdateCR(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
 	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
