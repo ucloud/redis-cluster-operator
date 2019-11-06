@@ -269,11 +269,11 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 		return Cluster.Wrap(err, "newRedisCluster")
 	}
 
-	currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
-	if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
-		logger.V(3).Info("cluster ok")
-		return nil
-	}
+	//currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
+	//if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
+	//	logger.V(3).Info("cluster ok")
+	//	return nil
+	//}
 
 	// First, we define the new masters
 	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
@@ -327,6 +327,15 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 
 		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "RebalancedCluster")
+		}
+	} else if len(newMasters) == len(curMasters) {
+		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
+		if bestEffort {
+			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
+		}
+
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 	}
 

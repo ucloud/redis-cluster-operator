@@ -209,5 +209,6 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	//return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	return reconcile.Result{}, nil
 }
