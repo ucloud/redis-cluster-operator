@@ -29,6 +29,7 @@ REDIS_BUCKET=${REDIS_BUCKET:-}
 REDIS_FOLDER=${REDIS_FOLDER:-}
 REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
+REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
 OSM_CONFIG_FILE=/etc/osm/config
 ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-false}
 
@@ -87,10 +88,10 @@ fi
 
 # Wait for redis to start
 # ref: http://unix.stackexchange.com/a/5279
-while ! nc -q 1 $REDIS_HOST $REDIS_PORT </dev/null; do
-  echo "Waiting... database is not ready yet"
-  sleep 5
-done
+#while ! nc -q 1 "${REDIS_HOST}" "${REDIS_PORT}" </dev/null; do
+#  echo "Waiting... database is not ready yet"
+#  sleep 5
+#done
 
 # cleanup data dump dir
 mkdir -p "$REDIS_DATA_DIR"
@@ -100,8 +101,8 @@ rm -rf *
 case "$op" in
   backup)
     echo "Dumping database......"
-    redis-cli --rdb dump.rdb -h ${REDIS_HOST} -a "${REDIS_PASSWORD}"
-    redis-cli -h ${REDIS_HOST} -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
+    redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
+    redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
     echo "Uploading dump file to the backend......."
     osm push --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_DATA_DIR" "$REDIS_FOLDER/$REDIS_SNAPSHOT"
 
@@ -109,6 +110,12 @@ case "$op" in
     ;;
   restore)
     echo "Pulling backup file from the backend"
+    if [ "${REDIS_RESTORE_SUCCEEDED}" == "1" ];then
+      echo "Has been restored successfully"
+      exit 0
+    fi
+    index=$(echo "${POD_NAME}" | awk -F- '{print $NF}')
+    REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
     osm pull --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR"
 
     echo "Recovery successful"

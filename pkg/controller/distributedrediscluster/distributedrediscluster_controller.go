@@ -42,7 +42,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler := &ReconcileDistributedRedisCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
-	reconiler.clusterStatusController = k8sutil.NewCRControl(reconiler.client)
+	reconiler.crController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
 	return reconiler
@@ -96,12 +96,12 @@ var _ reconcile.Reconciler = &ReconcileDistributedRedisCluster{}
 type ReconcileDistributedRedisCluster struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client                  client.Client
-	scheme                  *runtime.Scheme
-	ensurer                 clustermanger.IEnsureResource
-	checker                 clustermanger.ICheck
-	statefulSetController   k8sutil.IStatefulSetControl
-	clusterStatusController k8sutil.ICustomResource
+	client                client.Client
+	scheme                *runtime.Scheme
+	ensurer               clustermanger.IEnsureResource
+	checker               clustermanger.ICheck
+	statefulSetController k8sutil.IStatefulSetControl
+	crController          k8sutil.ICustomResource
 }
 
 // Reconcile reads that state of the cluster for a DistributedRedisCluster object and makes changes based on the state read
@@ -129,6 +129,11 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 
 	err = r.waitPodReady(instance)
 	if err != nil {
+		switch GetType(err) {
+		case StopRetry:
+			reqLogger.Info("invalid", "err", err)
+			return reconcile.Result{}, nil
+		}
 		reqLogger.WithValues("err", err).Info("requeue")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
@@ -171,6 +176,19 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, err
 	}
 
+	// update cr and wait for the next Reconcile loop
+	if instance.Spec.Init != nil && instance.Status.RestoreSucceeded <= 0 {
+		reqLogger.Info("update restore redis cluster cr")
+		instance.Status.RestoreSucceeded = 1
+		if err := r.crController.UpdateCRStatus(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		if err := r.crController.UpdateCR(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
 	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
@@ -191,5 +209,6 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	//return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	return reconcile.Result{}, nil
 }

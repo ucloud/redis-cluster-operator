@@ -1,11 +1,13 @@
 package distributedrediscluster
 
 import (
+	"fmt"
 	"net"
 	"time"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/clustering"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
 )
 
@@ -15,17 +17,36 @@ const (
 )
 
 func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	cluster.Validate()
+	if err := r.validate(cluster); err != nil {
+		if k8sutil.IsRequestRetryable(err) {
+			return Kubernetes.Wrap(err, "Validate")
+		}
+		return StopRetry.Wrap(err, "stop retry")
+	}
 	// step 1. apply statefulSet for cluster
 	labels := getLabels(cluster)
+	var backup *redisv1alpha1.RedisClusterBackup
+	var err error
+	if cluster.Spec.Init != nil {
+		backup, err = r.crController.GetRedisClusterBackup(cluster.Spec.Init.BackupSource.Namespace, cluster.Spec.Init.BackupSource.Name)
+		if err != nil {
+			return err
+		}
+	}
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
-	if err := r.ensurer.EnsureRedisStatefulset(cluster, labels); err != nil {
+	if err := r.ensurer.EnsureRedisStatefulset(cluster, backup, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulset")
 	}
 	if err := r.ensurer.EnsureRedisHeadLessSvc(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvc")
+	}
+	if err := r.ensurer.EnsureRedisOSMSecret(cluster, backup, labels); err != nil {
+		if k8sutil.IsRequestRetryable(err) {
+			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
+		}
+		return StopRetry.Wrap(err, "stop retry")
 	}
 
 	// step 2. wait for all redis node ready
@@ -33,6 +54,33 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.D
 		return Requeue.Wrap(err, "CheckRedisNodeNum")
 	}
 
+	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster) error {
+	initSpec := cluster.Spec.Init
+	if initSpec != nil {
+		if initSpec.BackupSource == nil {
+			return fmt.Errorf("backupSource is required")
+		}
+		backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
+		if err != nil {
+			return err
+		}
+		if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
+			return fmt.Errorf("backup is still running")
+		}
+		if cluster.Spec.Image == "" {
+			cluster.Spec.Image = backup.Status.ClusterImage
+		}
+		cluster.Spec.MasterSize = backup.Status.MasterSize
+		if cluster.Status.RestoreSucceeded <= 0 {
+			cluster.Spec.ClusterReplicas = 0
+		} else {
+			cluster.Spec.ClusterReplicas = backup.Status.ClusterReplicas
+		}
+	}
+	cluster.Validate()
 	return nil
 }
 
@@ -221,11 +269,11 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 		return Cluster.Wrap(err, "newRedisCluster")
 	}
 
-	currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
-	if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
-		logger.V(3).Info("cluster ok")
-		return nil
-	}
+	//currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
+	//if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
+	//	logger.V(3).Info("cluster ok")
+	//	return nil
+	//}
 
 	// First, we define the new masters
 	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
@@ -279,6 +327,15 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 
 		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "RebalancedCluster")
+		}
+	} else if len(newMasters) == len(curMasters) {
+		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
+		if bestEffort {
+			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
+		}
+
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 	}
 

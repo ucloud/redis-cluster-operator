@@ -9,6 +9,8 @@ import (
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 )
 
+const RestoreSucceeded = "succeeded"
+
 // NewConfigMapForCR creates a new ConfigMap for the given Cluster
 func NewConfigMapForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *corev1.ConfigMap {
 	// Do CLUSTER FAILOVER when master down
@@ -59,4 +61,22 @@ exec "$@"`
 
 func RedisConfigMapName(clusterName string) string {
 	return fmt.Sprintf("%s-%s", "redis-cluster", clusterName)
+}
+
+func NewConfigMapForRestore(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            RestoreConfigMapName(cluster.Name),
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
+		},
+		Data: map[string]string{
+			RestoreSucceeded: fmt.Sprintf("%d", cluster.Status.RestoreSucceeded),
+		},
+	}
+}
+
+func RestoreConfigMapName(clusterName string) string {
+	return fmt.Sprintf("%s-%s", "rediscluster-restore", clusterName)
 }

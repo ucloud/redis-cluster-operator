@@ -20,6 +20,8 @@ const (
 	Redis
 	// Cluster
 	Cluster
+	// StopRetry stop retry error
+	StopRetry
 )
 
 type customError struct {

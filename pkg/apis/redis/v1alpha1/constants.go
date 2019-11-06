@@ -74,4 +74,7 @@ const (
 
 	PrometheusExporterPortNumber    = 9100
 	PrometheusExporterTelemetryPath = "/metrics"
+
+	BackupDumpDir  = "/data"
+	UtilVolumeName = "util-volume"
 )
