@@ -1,0 +1,9 @@
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  name: example-restore
+spec:
+  init:
+    backupSource:
+      name: example-redisclusterbackup
+      namespace: default

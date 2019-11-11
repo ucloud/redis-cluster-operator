@@ -1,0 +1,15 @@
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  name: example-distributedrediscluster
+spec:
+  image: uhub.service.ucloud.cn/operator/redis:5.0.4-alpine
+  masterSize: 3
+  clusterReplicas: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 200Mi
+    requests:
+      cpu: 200m
+      memory: 100Mi

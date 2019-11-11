@@ -3,7 +3,8 @@ kind: DistributedRedisCluster
 metadata:
   name: example-distributedrediscluster
 spec:
-  # Add fields here
+  image: uhub.service.ucloud.cn/operator/redis:5.0.4-alpine
   masterSize: 3
-  ClusterReplicas: 1
-  serviceName: redis-nodes
+  clusterReplicas: 1
+  monitor:
+    image: oliver006/redis_exporter

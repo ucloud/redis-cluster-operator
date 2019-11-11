@@ -1,0 +1,21 @@
+apiVersion: v1
+data:
+  AWS_ACCESS_KEY_ID: dGVzdA==
+  AWS_SECRET_ACCESS_KEY: dGVzdA==
+kind: Secret
+metadata:
+  name: s3-secret
+type: Opaque
+---
+apiVersion: redis.kun/v1alpha1
+kind: RedisClusterBackup
+metadata:
+  name: example-redisclusterbackup
+spec:
+  image: uhub.service.ucloud.cn/operator/redis-tools:5.0.4
+  redisClusterName: example-distributedrediscluster
+  storageSecretName: s3-secret
+  # Replace this with the s3 info
+  s3:
+    endpoint: REPLACE_ENDPOINT
+    bucket: REPLACE_BUCKET
