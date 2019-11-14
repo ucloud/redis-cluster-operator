@@ -47,7 +47,7 @@ func getClusterPassword(client client.Client, cluster *redisv1alpha1.Distributed
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
@@ -142,4 +142,12 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 	}
 
 	return rCluster, nodes, nil
+}
+
+func clusterPods(pods []corev1.Pod) []*corev1.Pod {
+	var podSlice []*corev1.Pod
+	for _, pod := range pods {
+		podSlice = append(podSlice, &pod)
+	}
+	return podSlice
 }

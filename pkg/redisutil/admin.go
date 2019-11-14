@@ -52,11 +52,11 @@ type IAdmin interface {
 	// AttachSlaveToMaster attach a slave to a master node
 	AttachSlaveToMaster(slave *Node, masterID string) error
 	// DetachSlave dettach a slave to its master
-	//DetachSlave(slave *Node) error
+	DetachSlave(slave *Node) error
 	//// StartFailover execute the failover of the Redis Master corresponding to the addr
 	//StartFailover(addr string) error
-	//// ForgetNode execute the Redis command to force the cluster to forgot the the Node
-	//ForgetNode(id string) error
+	// ForgetNode execute the Redis command to force the cluster to forgot the the Node
+	ForgetNode(id string) error
 	//// ForgetNodeByAddr execute the Redis command to force the cluster to forgot the the Node
 	//ForgetNodeByAddr(id string) error
 	// SetSlots exec the redis command to set slots in a pipeline, provide
@@ -77,8 +77,8 @@ type IAdmin interface {
 	// MigrateKeys use to migrate keys from slot to other slot. if replace is true, replace key on busy error
 	// timeout is in milliseconds
 	MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int, timeout int, replace bool) (int, error)
-	//// FlushAndReset reset the cluster configuration of the node, the node is flushed in the same pipe to ensure reset works
-	//FlushAndReset(addr string, mode string) error
+	// FlushAndReset reset the cluster configuration of the node, the node is flushed in the same pipe to ensure reset works
+	FlushAndReset(addr string, mode string) error
 	//// FlushAll flush all keys in cluster
 	//FlushAll()
 	// GetHashMaxSlot get the max slot value
@@ -479,4 +479,70 @@ func (a *Admin) MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int,
 	}
 
 	return keyCount, nil
+}
+
+// ForgetNode used to force other redis cluster node to forget a specific node
+func (a *Admin) ForgetNode(id string) error {
+	infos, _ := a.GetClusterInfos()
+	for nodeAddr, nodeinfos := range infos.Infos {
+		if nodeinfos.Node.ID == id {
+			continue
+		}
+		c, err := a.Connections().Get(nodeAddr)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("cannot force a forget on node %s, for node %s", nodeAddr, id))
+			continue
+		}
+
+		if IsSlave(nodeinfos.Node) && nodeinfos.Node.MasterReferent == id {
+			a.DetachSlave(nodeinfos.Node)
+			log.Info(fmt.Sprintf("detach slave id: %s of master: %s", nodeinfos.Node.ID, id))
+		}
+
+		resp := c.Cmd("CLUSTER", "FORGET", id)
+		a.Connections().ValidateResp(resp, nodeAddr, "Unable to execute FORGET command")
+	}
+
+	log.Info("Forget node done", "node", id)
+	return nil
+}
+
+// DetachSlave use to detach a slave to a master
+func (a *Admin) DetachSlave(slave *Node) error {
+	c, err := a.Connections().Get(slave.IPPort())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("unable to get the connection for slave ID:%s, addr:%s , err:%v", slave.ID, slave.IPPort()))
+		return err
+	}
+
+	resp := c.Cmd("CLUSTER", "RESET", "SOFT")
+	if err = a.Connections().ValidateResp(resp, slave.IPPort(), "Cannot attach node to cluster"); err != nil {
+		return err
+	}
+
+	if err = a.AttachNodeToCluster(slave.IPPort()); err != nil {
+		log.Error(err, fmt.Sprintf("[DetachSlave] unable to AttachNodeToCluster the Slave id: %s addr:%s", slave.ID, slave.IPPort()))
+		return err
+	}
+
+	slave.SetReferentMaster("")
+	slave.SetRole(RedisMasterRole)
+
+	return nil
+}
+
+// FlushAndReset flush the cluster and reset the cluster configuration of the node. Commands are piped, to ensure no items arrived between flush and reset
+func (a *Admin) FlushAndReset(addr string, mode string) error {
+	c, err := a.Connections().Get(addr)
+	if err != nil {
+		return err
+	}
+	c.PipeAppend("FLUSHALL")
+	c.PipeAppend("CLUSTER", "RESET", mode)
+
+	if !a.Connections().ValidatePipeResp(c, addr, "Cannot reset node") {
+		return fmt.Errorf("Cannot reset node %s", addr)
+	}
+
+	return nil
 }

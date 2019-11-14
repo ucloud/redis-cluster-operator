@@ -2,11 +2,14 @@ package distributedrediscluster
 
 import (
 	"fmt"
-	"net"
 	"time"
+
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/clustering"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
 )
@@ -16,14 +19,23 @@ const (
 	requeueEnsure = 60 * time.Second
 )
 
-func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.DistributedRedisCluster) error {
+type syncContext struct {
+	cluster      *redisv1alpha1.DistributedRedisCluster
+	clusterInfos *redisutil.ClusterInfos
+	admin        redisutil.IAdmin
+	healer       manager.IHeal
+	pods         []*corev1.Pod
+	reqLogger    logr.Logger
+}
+
+func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error {
+	cluster := ctx.cluster
 	if err := r.validate(cluster); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "Validate")
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}
-	// step 1. apply statefulSet for cluster
 	labels := getLabels(cluster)
 	var backup *redisv1alpha1.RedisClusterBackup
 	var err error
@@ -48,9 +60,14 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(cluster *redisv1alpha1.D
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}
+	return nil
+}
 
-	// step 2. wait for all redis node ready
-	if err := r.checker.CheckRedisNodeNum(cluster); err != nil {
+func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error {
+	if _, err := ctx.healer.FixTerminatingPods(ctx.cluster, 5*time.Minute); err != nil {
+		return Kubernetes.Wrap(err, "FixTerminatingPods")
+	}
+	if err := r.checker.CheckRedisNodeNum(ctx.cluster); err != nil {
 		return Requeue.Wrap(err, "CheckRedisNodeNum")
 	}
 
@@ -84,23 +101,22 @@ func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.Distr
 	return nil
 }
 
-func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
+func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) error {
 	//logger.Info(">>> Assign a different config epoch to each node")
 	//err := admin.SetConfigEpoch()
 	//if err != nil {
 	//	return Redis.Wrap(err, "SetConfigEpoch")
 	//}
-	if _, err := admin.GetClusterInfos(); err == nil {
+	if _, err := ctx.admin.GetClusterInfos(); err == nil {
 		return nil
 	}
 	var firstNode *redisutil.Node
-	for _, nodeInfo := range clusterInfos.Infos {
+	for _, nodeInfo := range ctx.clusterInfos.Infos {
 		firstNode = nodeInfo.Node
 		break
 	}
-	logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
-	err := admin.AttachNodeToCluster(firstNode.IPPort())
+	ctx.reqLogger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
+	err := ctx.admin.AttachNodeToCluster(firstNode.IPPort())
 	if err != nil {
 		return Redis.Wrap(err, "AttachNodeToCluster")
 	}
@@ -108,13 +124,20 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(cluster *redisv1al
 	// waiting for cluster join will find all the nodes agree about
 	// the config as they are still empty with unassigned slots.
 	time.Sleep(1 * time.Second)
-	_, err = admin.GetClusterInfos()
+	if _, err := ctx.healer.FixFailedNodes(ctx.cluster, ctx.clusterInfos, ctx.admin); err != nil {
+		return Cluster.Wrap(err, "FixFailedNodes")
+	}
+	if _, err := ctx.healer.FixUntrustedNodes(ctx.cluster, ctx.clusterInfos, ctx.admin); err != nil {
+		return Cluster.Wrap(err, "FixUntrustedNodes")
+	}
+	_, err = ctx.admin.GetClusterInfos()
 	if err != nil {
 		return Requeue.Wrap(err, "wait for cluster join")
 	}
 	return nil
 }
 
+/*
 func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	// step 3. check if the cluster is empty, if it is empty, init the cluster
@@ -177,8 +200,9 @@ func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.Distribut
 	}
 
 	return nil
-}
+}*/
 
+/*
 func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
 	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
 	cNbMaster := cluster.Spec.MasterSize
@@ -254,10 +278,12 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.Di
 	}
 
 	return nil
-}
+}*/
 
-func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
+func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
+	cluster := ctx.cluster
+	admin := ctx.admin
+	clusterInfos := ctx.clusterInfos
 	if err := admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
 		return Redis.Wrap(err, "SetConfigIfNeed")
 	}
@@ -280,7 +306,7 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 	if err != nil {
 		return Cluster.Wrap(err, "DispatchMasters")
 	}
-	logger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
+	ctx.reqLogger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
 
 	// Second select Node that is already a slave
 	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
@@ -301,7 +327,7 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 	})
 
 	if 0 == len(curMasters) {
-		logger.Info("Creating cluster")
+		ctx.reqLogger.Info("Creating cluster")
 		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
 		if bestEffort {
 			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
@@ -315,7 +341,7 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(cluster *redisv1alpha1.
 			return Cluster.Wrap(err, "AllocSlots")
 		}
 	} else if len(newMasters) > len(curMasters) {
-		logger.Info("Scaling cluster")
+		ctx.reqLogger.Info("Scaling cluster")
 		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
 		if bestEffort {
 			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
