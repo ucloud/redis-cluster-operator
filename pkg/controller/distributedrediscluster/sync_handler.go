@@ -107,7 +107,8 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	//if err != nil {
 	//	return Redis.Wrap(err, "SetConfigEpoch")
 	//}
-	if _, err := ctx.admin.GetClusterInfos(); err == nil {
+	if infos, err := ctx.admin.GetClusterInfos(); err == nil {
+		ctx.reqLogger.V(5).Info("debug waitForClusterJoin", "cluster infos", infos)
 		return nil
 	}
 	var firstNode *redisutil.Node
@@ -124,12 +125,7 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	// waiting for cluster join will find all the nodes agree about
 	// the config as they are still empty with unassigned slots.
 	time.Sleep(1 * time.Second)
-	if _, err := ctx.healer.FixFailedNodes(ctx.cluster, ctx.clusterInfos, ctx.admin); err != nil {
-		return Cluster.Wrap(err, "FixFailedNodes")
-	}
-	if _, err := ctx.healer.FixUntrustedNodes(ctx.cluster, ctx.clusterInfos, ctx.admin); err != nil {
-		return Cluster.Wrap(err, "FixUntrustedNodes")
-	}
+
 	_, err = ctx.admin.GetClusterInfos()
 	if err != nil {
 		return Requeue.Wrap(err, "wait for cluster join")

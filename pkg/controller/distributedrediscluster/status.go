@@ -2,6 +2,7 @@ package distributedrediscluster
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -81,6 +82,22 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod,
 		status.Nodes = append(status.Nodes, newNode)
 	}
 	status.NumberOfMaster = nbMaster
+
+	minReplicationFactor := math.MaxInt32
+	maxReplicationFactor := 0
+	for _, counter := range nbSlaveByMaster {
+		if counter > maxReplicationFactor {
+			maxReplicationFactor = counter
+		}
+		if counter < minReplicationFactor {
+			minReplicationFactor = counter
+		}
+	}
+	if len(nbSlaveByMaster) == 0 {
+		minReplicationFactor = 0
+	}
+	status.MaxReplicationFactor = int32(maxReplicationFactor)
+	status.MinReplicationFactor = int32(minReplicationFactor)
 
 	return status
 }

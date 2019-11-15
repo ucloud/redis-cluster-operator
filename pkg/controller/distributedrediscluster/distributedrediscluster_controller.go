@@ -125,7 +125,8 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	}
 
 	ctx := &syncContext{
-		cluster: instance,
+		cluster:   instance,
+		reqLogger: reqLogger,
 	}
 
 	err = r.ensureCluster(ctx)
@@ -185,6 +186,16 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		}
 	}
 
+	requeue, err := ctx.healer.Heal(instance, clusterInfos, admin)
+	if err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "Heal")
+	}
+	if requeue {
+		return reconcile.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	ctx.admin = admin
+	ctx.clusterInfos = clusterInfos
 	err = r.waitForClusterJoin(ctx)
 	if err != nil {
 		switch GetType(err) {
@@ -215,13 +226,16 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
-	err = r.sync(ctx)
-	if err != nil {
-		new := instance.Status.DeepCopy()
-		SetClusterFailed(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
-		return reconcile.Result{}, err
+	if needClusterOperation(instance, reqLogger) {
+		err = r.sync(ctx)
+		if err != nil {
+			new := instance.Status.DeepCopy()
+			SetClusterFailed(new, err.Error())
+			r.updateClusterIfNeed(instance, new)
+			return reconcile.Result{}, err
+		}
 	}
+
 	newClusterInfos, err := admin.GetClusterInfos()
 	if err != nil {
 		if clusterInfos.Status == redisutil.ClusterInfosPartial {
@@ -231,6 +245,5 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	//return reconcile.Result{RequeueAfter: requeueEnsure}, nil
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
 }

@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,4 +151,23 @@ func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 		podSlice = append(podSlice, &pod)
 	}
 	return podSlice
+}
+
+func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
+	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize) {
+		reqLogger.V(4).Info("needClusterOperation---NumberOfMaster")
+		return true
+	}
+
+	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas) {
+		reqLogger.V(4).Info("needClusterOperation---MinReplicationFactor")
+		return true
+	}
+
+	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas) {
+		reqLogger.V(4).Info("needClusterOperation---MaxReplicationFactor")
+		return true
+	}
+
+	return false
 }
