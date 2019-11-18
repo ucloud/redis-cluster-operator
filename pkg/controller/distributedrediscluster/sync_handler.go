@@ -108,7 +108,7 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	//	return Redis.Wrap(err, "SetConfigEpoch")
 	//}
 	if infos, err := ctx.admin.GetClusterInfos(); err == nil {
-		ctx.reqLogger.V(5).Info("debug waitForClusterJoin", "cluster infos", infos)
+		ctx.reqLogger.V(6).Info("debug waitForClusterJoin", "cluster infos", infos)
 		return nil
 	}
 	var firstNode *redisutil.Node

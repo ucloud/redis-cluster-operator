@@ -132,6 +132,7 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 	for addr, c := range a.Connections().GetAll() {
 		nodeinfos, err := a.getInfos(c, addr)
 		if err != nil {
+			log.WithValues("err", err).Info("get redis info failed")
 			infos.Status = ClusterInfosPartial
 			clusterErr.partial = true
 			clusterErr.errs[addr] = err

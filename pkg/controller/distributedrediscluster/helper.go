@@ -53,14 +53,15 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redi
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
 		for _, container := range pod.Spec.Containers {
-			if container.Name == "redis-node" {
+			if container.Name == "redis" {
 				for _, port := range container.Ports {
-					if port.Name == "redis" {
+					if port.Name == "client" {
 						redisPort = fmt.Sprintf("%d", port.ContainerPort)
 					}
 				}
 			}
 		}
+		log.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
 		nodesAddrs = append(nodesAddrs, net.JoinHostPort(pod.Status.PodIP, redisPort))
 	}
 	adminConfig := redisutil.AdminOptions{
@@ -148,7 +149,8 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 	var podSlice []*corev1.Pod
 	for _, pod := range pods {
-		podSlice = append(podSlice, &pod)
+		podPointer := pod
+		podSlice = append(podSlice, &podPointer)
 	}
 	return podSlice
 }

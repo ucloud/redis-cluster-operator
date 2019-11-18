@@ -149,6 +149,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	}
 
 	ctx.pods = clusterPods(redisClusterPods.Items)
+	reqLogger.V(6).Info("debug cluster pods", "", ctx.pods)
 	ctx.healer = clustermanger.NewHealer(&heal.CheckAndHeal{
 		Logger:     reqLogger,
 		PodControl: k8sutil.NewPodController(r.client),
@@ -226,7 +227,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
+	instance.Status = *status
 	if needClusterOperation(instance, reqLogger) {
+		reqLogger.Info(">>>>>> clustering")
 		err = r.sync(ctx)
 		if err != nil {
 			new := instance.Status.DeepCopy()
