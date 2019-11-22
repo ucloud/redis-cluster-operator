@@ -104,10 +104,12 @@ type DistributedRedisClusterStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	Status         ClusterStatus      `json:"status"`
-	Reason         string             `json:"reason,omitempty"`
-	NumberOfMaster int32              `json:"numberOfMaster,omitempty"`
-	Nodes          []RedisClusterNode `json:"nodes"`
+	Status               ClusterStatus      `json:"status"`
+	Reason               string             `json:"reason,omitempty"`
+	NumberOfMaster       int32              `json:"numberOfMaster,omitempty"`
+	MinReplicationFactor int32              `json:"minReplicationFactor,omitempty"`
+	MaxReplicationFactor int32              `json:"maxReplicationFactor,omitempty"`
+	Nodes                []RedisClusterNode `json:"nodes"`
 	// The number of restore which reached phase Succeeded.
 	// +optional
 	RestoreSucceeded int32 `json:"restoreSucceeded,omitempty"`

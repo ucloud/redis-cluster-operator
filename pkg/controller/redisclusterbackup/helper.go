@@ -5,6 +5,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -90,4 +91,12 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) corev1.EnvVar
 			},
 		},
 	}
+}
+
+func newDirectClient(config *rest.Config) client.Client {
+	c, err := client.New(config, client.Options{})
+	if err != nil {
+		panic(err)
+	}
+	return c
 }

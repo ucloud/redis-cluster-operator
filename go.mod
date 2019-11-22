@@ -11,6 +11,7 @@ require (
 	github.com/mediocregopher/radix.v2 v0.0.0-20181115013041-b67df6e626f9
 	github.com/operator-framework/operator-sdk v0.10.1-0.20190919225052-3a85983ecc72
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.3
 	gomodules.xyz/stow v0.2.0
 	k8s.io/api v0.0.0-20190612125737-db0771252981

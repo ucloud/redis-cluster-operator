@@ -180,7 +180,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	reqLogger.V(4).Info("Backup running")
+	reqLogger.Info("Backup running")
 	r.recorder.Event(
 		backup,
 		corev1.EventTypeNormal,
@@ -502,6 +502,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 
 				if jobSucceeded {
 					msg := "Successfully completed backup"
+					reqLogger.Info(msg)
 					r.recorder.Event(
 						backup,
 						corev1.EventTypeNormal,
@@ -516,6 +517,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 					)
 				} else {
 					msg := "Failed to complete backup"
+					reqLogger.Info(msg)
 					r.recorder.Event(
 						backup,
 						corev1.EventTypeWarning,

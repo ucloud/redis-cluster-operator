@@ -17,6 +17,7 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/heal"
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
@@ -118,23 +119,24 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 
-	err = r.waitPodReady(instance)
+	ctx := &syncContext{
+		cluster:   instance,
+		reqLogger: reqLogger,
+	}
+
+	err = r.ensureCluster(ctx)
 	if err != nil {
 		switch GetType(err) {
 		case StopRetry:
 			reqLogger.Info("invalid", "err", err)
 			return reconcile.Result{}, nil
 		}
-		reqLogger.WithValues("err", err).Info("requeue")
+		reqLogger.WithValues("err", err).Info("ensureCluster")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
 		r.updateClusterIfNeed(instance, new)
@@ -145,12 +147,34 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
+
+	ctx.pods = clusterPods(redisClusterPods.Items)
+	reqLogger.V(6).Info("debug cluster pods", "", ctx.pods)
+	ctx.healer = clustermanger.NewHealer(&heal.CheckAndHeal{
+		Logger:     reqLogger,
+		PodControl: k8sutil.NewPodController(r.client),
+		Pods:       ctx.pods,
+		DryRun:     false,
+	})
+	err = r.waitPodReady(ctx)
+	if err != nil {
+		switch GetType(err) {
+		case Kubernetes:
+			return reconcile.Result{}, err
+		}
+		reqLogger.WithValues("err", err).Info("waitPodReady")
+		new := instance.Status.DeepCopy()
+		SetClusterScaling(new, err.Error())
+		r.updateClusterIfNeed(instance, new)
+		return reconcile.Result{RequeueAfter: requeueAfter}, nil
+	}
+
 	password, err := getClusterPassword(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}
 
-	admin, err := newRedisAdmin(redisClusterPods.Items, password, config.RedisConf())
+	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf())
 	if err != nil {
 		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
 	}
@@ -163,7 +187,17 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		}
 	}
 
-	err = r.waitForClusterJoin(instance, clusterInfos, admin)
+	requeue, err := ctx.healer.Heal(instance, clusterInfos, admin)
+	if err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "Heal")
+	}
+	if requeue {
+		return reconcile.Result{RequeueAfter: requeueAfter}, nil
+	}
+
+	ctx.admin = admin
+	ctx.clusterInfos = clusterInfos
+	err = r.waitForClusterJoin(ctx)
 	if err != nil {
 		switch GetType(err) {
 		case Requeue:
@@ -193,13 +227,18 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
-	err = r.ensureCluster(instance, clusterInfos, admin)
-	if err != nil {
-		new := instance.Status.DeepCopy()
-		SetClusterFailed(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
-		return reconcile.Result{}, err
+	instance.Status = *status
+	if needClusterOperation(instance, reqLogger) {
+		reqLogger.Info(">>>>>> clustering")
+		err = r.sync(ctx)
+		if err != nil {
+			new := instance.Status.DeepCopy()
+			SetClusterFailed(new, err.Error())
+			r.updateClusterIfNeed(instance, new)
+			return reconcile.Result{}, err
+		}
 	}
+
 	newClusterInfos, err := admin.GetClusterInfos()
 	if err != nil {
 		if clusterInfos.Status == redisutil.ClusterInfosPartial {
@@ -209,6 +248,5 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	//return reconcile.Result{RequeueAfter: requeueEnsure}, nil
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
 }

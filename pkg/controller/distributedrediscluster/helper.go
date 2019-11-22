@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,19 +48,20 @@ func getClusterPassword(client client.Client, cluster *redisv1alpha1.Distributed
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
 		for _, container := range pod.Spec.Containers {
-			if container.Name == "redis-node" {
+			if container.Name == "redis" {
 				for _, port := range container.Ports {
-					if port.Name == "redis" {
+					if port.Name == "client" {
 						redisPort = fmt.Sprintf("%d", port.ContainerPort)
 					}
 				}
 			}
 		}
+		log.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
 		nodesAddrs = append(nodesAddrs, net.JoinHostPort(pod.Status.PodIP, redisPort))
 	}
 	adminConfig := redisutil.AdminOptions{
@@ -142,4 +144,32 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 	}
 
 	return rCluster, nodes, nil
+}
+
+func clusterPods(pods []corev1.Pod) []*corev1.Pod {
+	var podSlice []*corev1.Pod
+	for _, pod := range pods {
+		podPointer := pod
+		podSlice = append(podSlice, &podPointer)
+	}
+	return podSlice
+}
+
+func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
+	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize) {
+		reqLogger.V(4).Info("needClusterOperation---NumberOfMaster")
+		return true
+	}
+
+	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas) {
+		reqLogger.V(4).Info("needClusterOperation---MinReplicationFactor")
+		return true
+	}
+
+	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas) {
+		reqLogger.V(4).Info("needClusterOperation---MaxReplicationFactor")
+		return true
+	}
+
+	return false
 }
