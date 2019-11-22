@@ -350,7 +350,7 @@ func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
 		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "RebalancedCluster")
 		}
-	} else if len(newMasters) == len(curMasters) {
+	} else if cluster.Status.MinReplicationFactor < cluster.Spec.ClusterReplicas {
 		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
 		if bestEffort {
 			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort

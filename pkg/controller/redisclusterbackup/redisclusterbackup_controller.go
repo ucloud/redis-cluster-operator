@@ -42,7 +42,8 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	r := &ReconcileRedisClusterBackup{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	r.crController = k8sutil.NewCRControl(r.client)
-	r.jobController = k8sutil.NewJobController(r.client)
+	r.directClient = newDirectClient(mgr.GetConfig())
+	r.jobController = k8sutil.NewJobController(r.directClient)
 	r.recorder = mgr.GetEventRecorderFor("redis-cluster-operator-backup")
 	return r
 }
@@ -109,9 +110,10 @@ var _ reconcile.Reconciler = &ReconcileRedisClusterBackup{}
 type ReconcileRedisClusterBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	client       client.Client
+	directClient client.Client
+	scheme       *runtime.Scheme
+	recorder     record.EventRecorder
 
 	crController  k8sutil.ICustomResource
 	jobController k8sutil.IJobControl
