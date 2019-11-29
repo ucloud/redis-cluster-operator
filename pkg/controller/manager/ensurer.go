@@ -138,11 +138,11 @@ func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.Distrib
 	if cluster.Spec.Init == nil || cluster.Status.RestoreSucceeded > 0 {
 		return nil
 	}
-	secret, err := osm.NewOSMSecret(r.client, k8sutil.OSMSecretName(backup.Name), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
 	if err != nil {
 		return err
 	}
-	if err := k8sutil.CreateSecret(r.client, secret); err != nil {
+	if err := k8sutil.CreateSecret(r.client, secret, r.logger); err != nil {
 		return err
 	}
 	return nil

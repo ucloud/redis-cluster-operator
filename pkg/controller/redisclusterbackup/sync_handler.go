@@ -103,7 +103,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewOSMSecret(r.client, k8sutil.OSMSecretName(backup.Name), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)
@@ -116,7 +116,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return nil // don't retry
 	}
 
-	if err := k8sutil.CreateSecret(r.client, secret); err != nil {
+	if err := k8sutil.CreateSecret(r.client, secret, reqLogger); err != nil {
 		r.recorder.Event(
 			backup,
 			corev1.EventTypeWarning,

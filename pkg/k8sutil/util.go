@@ -2,8 +2,8 @@ package k8sutil
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
@@ -18,11 +18,7 @@ func IsRequestRetryable(err error) bool {
 		kerr.IsTooManyRequests(err)
 }
 
-func OSMSecretName(name string) string {
-	return fmt.Sprintf("osm-%v", name)
-}
-
-func CreateSecret(client client.Client, secret *corev1.Secret) error {
+func CreateSecret(client client.Client, secret *corev1.Secret, logger logr.Logger) error {
 	ctx := context.TODO()
 	s := &corev1.Secret{}
 	err := client.Get(ctx, types.NamespacedName{
@@ -31,6 +27,8 @@ func CreateSecret(client client.Client, secret *corev1.Secret) error {
 	}, s)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			logger.WithValues("Secret.Namespace", secret.Namespace, "Secret.Name", secret.Name).
+				Info("creating a new secret")
 			return client.Create(ctx, secret)
 		}
 	}

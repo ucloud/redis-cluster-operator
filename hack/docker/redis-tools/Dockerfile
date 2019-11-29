@@ -5,6 +5,7 @@ RUN set -x \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     netcat \
+    zip \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man /tmp/*
 
 COPY osm /usr/local/bin/osm
