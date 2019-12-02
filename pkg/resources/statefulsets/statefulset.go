@@ -25,22 +25,22 @@ const (
 )
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
-func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (*appsv1.StatefulSet, error) {
+func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
+	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (*appsv1.StatefulSet, error) {
 	password := redisPassword(cluster)
 	volumes := redisVolumes(cluster, backup)
-	name := ClusterStatefulSetName(cluster.Name)
 	namespace := cluster.Namespace
 	spec := cluster.Spec
 	size := spec.MasterSize * (spec.ClusterReplicas + 1)
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
+			Name:            ssName,
 			Namespace:       namespace,
 			Labels:          labels,
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: cluster.Spec.ServiceName,
+			ServiceName: svcName,
 			Replicas:    &size,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -132,8 +132,12 @@ func persistentClaim(cluster *redisv1alpha1.DistributedRedisCluster, labels map[
 	}
 }
 
-func ClusterStatefulSetName(clusterName string) string {
-	return fmt.Sprintf("drc-%s", clusterName)
+func ClusterStatefulSetName(clusterName string, i int) string {
+	return fmt.Sprintf("drc-%s-%d", clusterName, i)
+}
+
+func ClusterHeadlessSvcName(name string, i int) string {
+	return fmt.Sprintf("%s-%d", name, i)
 }
 
 func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) []string {

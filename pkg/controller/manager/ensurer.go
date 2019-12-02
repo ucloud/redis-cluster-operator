@@ -17,9 +17,9 @@ import (
 )
 
 type IEnsureResource interface {
-	EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster,
+	EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster,
 		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
-	EnsureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster,
 		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
@@ -47,28 +47,39 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 	}
 }
 
-func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster,
+func (r *realEnsureResource) EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster,
+	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
+		if err := r.ensureRedisStatefulset(cluster, name, svcName, backup, labels); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
 	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
 	if err := r.ensureRedisPDB(cluster, labels); err != nil {
 		return err
 	}
 
-	name := statefulsets.ClusterStatefulSetName(cluster.Name)
-	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
+	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, ssName)
 	if err == nil {
 		if (cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)) != *ss.Spec.Replicas {
-			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
+			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
 				Info("scaling statefulSet")
-			newSS, err := statefulsets.NewStatefulSetForCR(cluster, backup, labels)
+			newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, backup, labels)
 			if err != nil {
 				return err
 			}
 			return r.statefulSetClient.UpdateStatefulSet(newSS)
 		}
 	} else if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
+		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
 			Info("creating a new statefulSet")
-		newSS, err := statefulsets.NewStatefulSetForCR(cluster, backup, labels)
+		newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, backup, labels)
 		if err != nil {
 			return err
 		}
@@ -88,12 +99,22 @@ func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRe
 	return err
 }
 
-func (r *realEnsureResource) EnsureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.svcClient.GetService(cluster.Namespace, cluster.Spec.ServiceName)
+func (r *realEnsureResource) EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
+		if err := r.ensureRedisHeadLessSvc(cluster, svcName, labels); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *realEnsureResource) ensureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {
+	_, err := r.svcClient.GetService(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
 		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
 			Info("creating a new headless service")
-		svc := services.NewHeadLessSvcForCR(cluster, labels)
+		svc := services.NewHeadLessSvcForCR(cluster, name, labels)
 		return r.svcClient.CreateService(svc)
 	}
 	return err
