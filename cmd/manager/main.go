@@ -29,6 +29,7 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/apis"
 	config2 "github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 	"github.com/ucloud/redis-cluster-operator/version"
 )
 
@@ -77,6 +78,8 @@ func main() {
 		log.Error(err, "Failed to get watch namespace")
 		os.Exit(1)
 	}
+
+	utils.SetClusterScoped(namespace)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
