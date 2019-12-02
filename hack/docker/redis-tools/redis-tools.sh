@@ -104,7 +104,7 @@ case "$op" in
     redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
     redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
     echo "Uploading dump file to the backend......."
-    osm push --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_DATA_DIR" "$REDIS_FOLDER/$REDIS_SNAPSHOT"
+    osm --config "$OSM_CONFIG_FILE" sync "$REDIS_DATA_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
@@ -116,7 +116,7 @@ case "$op" in
     fi
     index=$(echo "${POD_NAME}" | awk -F- '{print $NF}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
-    osm pull --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$REDIS_BUCKET" "$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR"
+    osm --config "$OSM_CONFIG_FILE" sync ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR" -v
 
     echo "Recovery successful"
     ;;

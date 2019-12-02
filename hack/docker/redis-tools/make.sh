@@ -17,7 +17,7 @@ IMG=redis-tools
 DB_VERSION=5.0.4
 TAG="$DB_VERSION"
 
-OSM_VER=${OSM_VER:-0.9.1}
+OSM_VER=${OSM_VER:-v1.50.2}
 
 DIST=$REPO_ROOT/dist
 mkdir -p $DIST
@@ -26,15 +26,17 @@ build() {
   pushd "$REPO_ROOT/hack/docker/redis-tools"
 
   if [ ! -f "osm" ]; then
-    # Download osm
-    wget https://cdn.appscode.com/binaries/osm/${OSM_VER}/osm-alpine-amd64
-    chmod +x osm-alpine-amd64
-    mv osm-alpine-amd64 osm
+    # Download rclone
+    wget https://downloads.rclone.org/"${OSM_VER}"/rclone-"${OSM_VER}"-linux-amd64.zip
+    unzip rclone-"${OSM_VER}"-linux-amd64.zip
+    chmod +x rclone-"${OSM_VER}"-linux-amd64/rclone
+    mv rclone-"${OSM_VER}"-linux-amd64/rclone osm
   fi
 
   local cmd="docker build --pull -t $DOCKER_REGISTRY/$IMG:$TAG ."
   echo $cmd; $cmd
 
+  rm -rf rclone-"${OSM_VER}"-linux-amd64*
   rm osm
   popd
 }

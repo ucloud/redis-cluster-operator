@@ -235,7 +235,7 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 			fmt.Sprintf("--web.telemetry-path=%v", redisv1alpha1.PrometheusExporterTelemetryPath),
 		}, cluster.Spec.Monitor.Args...),
 		Image:           cluster.Spec.Monitor.Image,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: corev1.PullAlways,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "prom-http",
@@ -266,7 +266,7 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *
 	container := corev1.Container{
 		Name:            redisv1alpha1.JobTypeRestore,
 		Image:           backup.Spec.Image,
-		ImagePullPolicy: "Always",
+		ImagePullPolicy: corev1.PullAlways,
 		Args: []string{
 			redisv1alpha1.JobTypeRestore,
 			fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
