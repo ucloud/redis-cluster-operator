@@ -31,7 +31,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 	volumes := redisVolumes(cluster, backup)
 	namespace := cluster.Namespace
 	spec := cluster.Spec
-	size := spec.MasterSize * (spec.ClusterReplicas + 1)
+	size := spec.ClusterReplicas + 1
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            ssName,
