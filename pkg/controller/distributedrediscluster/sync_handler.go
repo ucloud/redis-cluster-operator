@@ -30,7 +30,7 @@ type syncContext struct {
 
 func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error {
 	cluster := ctx.cluster
-	if err := r.validate(cluster); err != nil {
+	if err := r.validate(cluster, ctx.reqLogger); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "Validate")
 		}
@@ -74,7 +74,7 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error 
 	return nil
 }
 
-func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster) error {
+func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
 	initSpec := cluster.Spec.Init
 	if initSpec != nil {
 		if initSpec.BackupSource == nil {
@@ -97,7 +97,7 @@ func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.Distr
 			cluster.Spec.ClusterReplicas = backup.Status.ClusterReplicas
 		}
 	}
-	cluster.Validate()
+	cluster.Validate(reqLogger)
 	return nil
 }
 

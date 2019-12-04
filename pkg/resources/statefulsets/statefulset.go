@@ -154,6 +154,7 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 	if len(cluster.Spec.Command) > 0 {
 		cmd = append(cmd, cluster.Spec.Command...)
 	}
+
 	return cmd
 }
 

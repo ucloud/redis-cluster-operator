@@ -48,6 +48,11 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod,
 			IP:       pod.Status.PodIP,
 			Slots:    []string{},
 		}
+		if len(pod.OwnerReferences) > 0 {
+			if pod.OwnerReferences[0].Kind == "StatefulSet" {
+				newNode.StatefulSet = pod.OwnerReferences[0].Name
+			}
+		}
 		redisNodes, err := clusterInfos.GetNodes().GetNodesByFunc(func(node *redisutil.Node) bool {
 			return node.IP == pod.Status.PodIP
 		})

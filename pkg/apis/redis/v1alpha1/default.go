@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
@@ -16,7 +20,7 @@ const (
 	defaultRedisImage  = "redis:5.0.4-alpine"
 )
 
-func (in *DistributedRedisCluster) Validate() {
+func (in *DistributedRedisCluster) Validate(log logr.Logger) {
 	if in.Spec.MasterSize < minMasterSize {
 		in.Spec.MasterSize = minMasterSize
 	}
@@ -35,6 +39,12 @@ func (in *DistributedRedisCluster) Validate() {
 
 	if in.Spec.Resources == nil || in.Spec.Resources.Size() == 0 {
 		in.Spec.Resources = defaultResource()
+	}
+
+	renameCmds := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
+	for key, value := range renameCmds {
+		cmd := fmt.Sprintf("rename-command %s %s", key, value)
+		in.Spec.Command = append(in.Spec.Command, cmd)
 	}
 
 	mon := in.Spec.Monitor

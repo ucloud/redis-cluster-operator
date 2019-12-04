@@ -117,14 +117,15 @@ type DistributedRedisClusterStatus struct {
 
 // RedisClusterNode represent a RedisCluster Node
 type RedisClusterNode struct {
-	ID        string    `json:"id"`
-	Role      RedisRole `json:"role"`
-	IP        string    `json:"ip"`
-	Port      string    `json:"port"`
-	Slots     []string  `json:"slots,omitempty"`
-	MasterRef string    `json:"masterRef,omitempty"`
-	PodName   string    `json:"podName"`
-	NodeName  string    `json:"nodeName"`
+	ID          string    `json:"id"`
+	Role        RedisRole `json:"role"`
+	IP          string    `json:"ip"`
+	Port        string    `json:"port"`
+	Slots       []string  `json:"slots,omitempty"`
+	MasterRef   string    `json:"masterRef,omitempty"`
+	PodName     string    `json:"podName"`
+	NodeName    string    `json:"nodeName"`
+	StatefulSet string    `json:"statefulSet"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

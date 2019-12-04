@@ -1,17 +1,17 @@
 package redisutil
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/mediocregopher/radix.v2/redis"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
@@ -90,7 +90,7 @@ func NewAdminConnections(addrs []string, options *AdminOptions) IAdminConnection
 			cnx.connectionTimeout = options.ConnectionTimeout
 		}
 		if _, err := os.Stat(options.RenameCommandsFile); err == nil {
-			cnx.commandsMapping = buildCommandReplaceMapping(options.RenameCommandsFile)
+			cnx.commandsMapping = utils.BuildCommandReplaceMapping(options.RenameCommandsFile, log)
 		}
 		cnx.clientName = options.ClientName
 		cnx.password = options.Password
@@ -315,30 +315,4 @@ func (cnx *AdminConnections) ValidatePipeResp(client IClient, addr, errMessage s
 	}
 
 	return ok
-}
-
-// buildCommandReplaceMapping reads the config file with the command-replace lines and build a mapping of
-// bad lines are ignored silently
-func buildCommandReplaceMapping(filePath string) map[string]string {
-	mapping := make(map[string]string)
-	file, err := os.Open(filePath)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("cannot open %s", filePath))
-		return mapping
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		elems := strings.Fields(scanner.Text())
-		if len(elems) == 3 && strings.ToLower(elems[0]) == "rename-command" {
-			mapping[strings.ToUpper(elems[1])] = elems[2]
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Error(err, fmt.Sprintf("cannot parse %s", filePath))
-		return mapping
-	}
-	return mapping
 }
