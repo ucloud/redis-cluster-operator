@@ -43,7 +43,7 @@ func (in *DistributedRedisCluster) Validate(log logr.Logger) {
 
 	renameCmds := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
 	for key, value := range renameCmds {
-		cmd := fmt.Sprintf("rename-command %s %s", key, value)
+		cmd := fmt.Sprintf("--rename-command %s %s", key, value)
 		in.Spec.Command = append(in.Spec.Command, cmd)
 	}
 
