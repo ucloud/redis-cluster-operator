@@ -109,6 +109,7 @@ type DistributedRedisClusterStatus struct {
 	NumberOfMaster       int32              `json:"numberOfMaster,omitempty"`
 	MinReplicationFactor int32              `json:"minReplicationFactor,omitempty"`
 	MaxReplicationFactor int32              `json:"maxReplicationFactor,omitempty"`
+	NodesPlacement       NodesPlacementInfo `json:"nodesPlacementInfo,omitempty"`
 	Nodes                []RedisClusterNode `json:"nodes"`
 	// The number of restore which reached phase Succeeded.
 	// +optional

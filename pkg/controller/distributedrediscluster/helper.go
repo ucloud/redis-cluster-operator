@@ -141,6 +141,7 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 		if rNode, ok := rCluster.Nodes[node.ID]; ok {
 			rNode.PodName = node.PodName
 			rNode.NodeName = node.NodeName
+			rNode.StatefulSet = node.StatefulSet
 		}
 	}
 

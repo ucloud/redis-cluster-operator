@@ -29,12 +29,14 @@ func NewCheck(client client.Client) ICheck {
 func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisCluster) error {
 	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
 		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
-		expectNodeNum := cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)
+		expectNodeNum := cluster.Spec.ClusterReplicas + 1
 		ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
 		if err != nil {
 			return err
 		}
-		return c.checkRedisNodeNum(expectNodeNum, ss)
+		if err := c.checkRedisNodeNum(expectNodeNum, ss); err != nil {
+			return err
+		}
 	}
 
 	return nil

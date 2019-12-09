@@ -21,7 +21,6 @@ import (
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
-	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 var log = logf.Log.WithName("controller_distributedrediscluster")
@@ -69,7 +68,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
 			// Ignore updates to CR status in which case metadata.Generation does not change
 			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
-				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true")
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true",
+					"old", e.ObjectOld, "new", e.ObjectNew)
 				return true
 			}
 			return false
@@ -155,7 +155,8 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(instance.Namespace, statefulsets.ClusterStatefulSetName(instance.Name, 0))
+	matchLabels := getLabels(instance)
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(matchLabels)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
@@ -235,6 +236,10 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, nil
 	}
 
+	if err := admin.SetConfigIfNeed(instance.Spec.Config); err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "SetConfigIfNeed")
+	}
+
 	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
@@ -242,7 +247,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	instance.Status = *status
 	if needClusterOperation(instance, reqLogger) {
 		reqLogger.Info(">>>>>> clustering")
-		err = r.sync(ctx)
+		err = r.syncCluster(ctx)
 		if err != nil {
 			new := instance.Status.DeepCopy()
 			SetClusterFailed(new, err.Error())

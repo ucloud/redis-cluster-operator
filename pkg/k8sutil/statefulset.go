@@ -21,6 +21,7 @@ type IStatefulSetControl interface {
 	GetStatefulSet(namespace, name string) (*appsv1.StatefulSet, error)
 	// GetStatefulSetPods will retrieve the pods managed by a given StatefulSet.
 	GetStatefulSetPods(namespace, name string) (*corev1.PodList, error)
+	GetStatefulSetPodsByLabels(labels map[string]string) (*corev1.PodList, error)
 }
 
 type stateFulSetController struct {
@@ -71,5 +72,12 @@ func (s *stateFulSetController) GetStatefulSetPods(namespace, name string) (*cor
 	}
 	foundPods := &corev1.PodList{}
 	err = s.client.List(context.TODO(), foundPods, match)
+	return foundPods, err
+}
+
+// GetStatefulSetPodsByLabels implement the IStatefulSetControl.Interface.
+func (s *stateFulSetController) GetStatefulSetPodsByLabels(labels map[string]string) (*corev1.PodList, error) {
+	foundPods := &corev1.PodList{}
+	err := s.client.List(context.TODO(), foundPods, client.MatchingLabels(labels))
 	return foundPods, err
 }

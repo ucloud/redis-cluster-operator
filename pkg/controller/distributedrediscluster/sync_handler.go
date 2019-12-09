@@ -54,6 +54,9 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisHeadLessSvcs(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvcs")
 	}
+	if err := r.ensurer.EnsureRedisSvc(cluster, labels); err != nil {
+		return Kubernetes.Wrap(err, "EnsureRedisSvc")
+	}
 	if err := r.ensurer.EnsureRedisOSMSecret(cluster, backup, labels); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
@@ -132,149 +135,6 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	}
 	return nil
 }
-
-/*
-func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	// step 3. check if the cluster is empty, if it is empty, init the cluster
-	isEmpty, err := admin.ClusterManagerNodeIsEmpty()
-	if err != nil {
-		return Redis.Wrap(err, "ClusterManagerNodeIsEmpty")
-	}
-	if isEmpty {
-		logger.Info("cluster nodes", "info", clusterInfos.GetNodes().String())
-
-		if err := makeCluster(cluster, clusterInfos); err != nil {
-			return NoType.Wrap(err, "makeCluster")
-		}
-		var firstNode *redisutil.Node
-		for _, nodeInfo := range clusterInfos.Infos {
-			if len(nodeInfo.Node.MasterReferent) == 0 {
-				if firstNode == nil {
-					firstNode = nodeInfo.Node
-				}
-				err = admin.AddSlots(net.JoinHostPort(nodeInfo.Node.IP, nodeInfo.Node.Port), nodeInfo.Node.Slots)
-				if err != nil {
-					return Redis.Wrap(err, "AddSlots")
-				}
-			}
-		}
-		logger.Info(">>> Nodes configuration updated")
-		logger.Info(">>> Assign a different config epoch to each node")
-		err = admin.SetConfigEpoch()
-		if err != nil {
-			return Redis.Wrap(err, "SetConfigEpoch")
-		}
-		logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
-		err = admin.AttachNodeToCluster(firstNode.IPPort())
-		if err != nil {
-			return Redis.Wrap(err, "AttachNodeToCluster")
-		}
-
-		time.Sleep(1 * time.Second)
-		for {
-			_, err = admin.GetClusterInfos()
-			if err == nil {
-				break
-			}
-			logger.Info("wait custer consistent")
-			time.Sleep(1 * time.Second)
-		}
-
-		for _, nodeInfo := range clusterInfos.Infos {
-			if len(nodeInfo.Node.MasterReferent) != 0 {
-				err = admin.AttachSlaveToMaster(nodeInfo.Node, nodeInfo.Node.MasterReferent)
-				if err != nil {
-					return Redis.Wrap(err, "AttachSlaveToMaster")
-				}
-			}
-		}
-	}
-
-	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	return nil
-}*/
-
-/*
-func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	cNbMaster := cluster.Spec.MasterSize
-	cReplicaFactor := cluster.Spec.ClusterReplicas
-	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
-	if err != nil {
-		return Cluster.Wrap(err, "newRedisCluster")
-	}
-
-	// First, we define the new masters
-	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
-	if err != nil {
-		return Cluster.Wrap(err, "DispatchMasters")
-	}
-	logger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
-
-	// Second select Node that is already a slave
-	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
-
-	// New slaves are slaves which is currently a master with no slots
-	newSlave := nodes.FilterByFunc(func(nodeA *redisutil.Node) bool {
-		for _, nodeB := range newMasters {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		for _, nodeB := range currentSlaveNodes {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		return true
-	})
-
-	// Depending on whether we scale up or down, we will dispatch slaves before/after the dispatch of slots
-	if cNbMaster < int32(len(curMasters)) {
-		logger.Info("current masters > specification", "curMasters", curMasters, "masterSize", cNbMaster)
-		// this happens usually after a scale down of the cluster
-		// we should dispatch slots before dispatching slaves
-		if err := clustering.DispatchSlotToNewMasters(rCluster, admin, newMasters, curMasters, allMaster); err != nil {
-			return Cluster.Wrap(err, "DispatchSlotToNewMasters")
-		}
-
-		// assign master/slave roles
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-	} else {
-		logger.Info("current masters < specification", "curMasters", curMasters, "masterSize", cNbMaster)
-		// We are scaling up the nbmaster or the nbmaster doesn't change.
-		// assign master/slave roles
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-
-		if err := clustering.DispatchSlotToNewMasters(rCluster, admin, newMasters, curMasters, allMaster); err != nil {
-			return Cluster.Wrap(err, "DispatchSlotToNewMasters")
-		}
-	}
-
-	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	return nil
-}*/
 
 func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
 	cluster := ctx.cluster
@@ -361,5 +221,64 @@ func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
 		}
 	}
 
+	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
+	cluster := ctx.cluster
+	admin := ctx.admin
+	clusterInfos := ctx.clusterInfos
+	expectMasterNum := cluster.Spec.MasterSize
+	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
+	if err != nil {
+		return Cluster.Wrap(err, "newRedisCluster")
+	}
+	clusterCtx := clustering.NewCtx(rCluster, nodes, ctx.reqLogger)
+	if err := clusterCtx.DispatchMasters(); err != nil {
+		return Cluster.Wrap(err, "DispatchMasters")
+	}
+	curMasters := clusterCtx.GetCurrentMasters()
+	newMasters := clusterCtx.GetNewMasters()
+	if len(curMasters) == 0 {
+		ctx.reqLogger.Info("Creating cluster")
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
+
+		}
+		newRedisSlavesByMaster := clusterCtx.GetSlaves()
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
+		}
+
+		if err := clustering.AllocSlots(admin, newMasters); err != nil {
+			return Cluster.Wrap(err, "AllocSlots")
+		}
+	} else if len(newMasters) > 0 {
+		ctx.reqLogger.Info("Scaling up")
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
+
+		}
+		newRedisSlavesByMaster := clusterCtx.GetSlaves()
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
+		}
+
+		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
+			return Cluster.Wrap(err, "RebalancedCluster")
+		}
+	} else if cluster.Status.MinReplicationFactor < cluster.Spec.ClusterReplicas {
+		ctx.reqLogger.Info("Scaling slave")
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
+
+		}
+		newRedisSlavesByMaster := clusterCtx.GetSlaves()
+		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+			return Cluster.Wrap(err, "AttachingSlavesToMaster")
+		}
+	} else if len(curMasters) > int(expectMasterNum) {
+		ctx.reqLogger.Info("Scaling down")
+	}
 	return nil
 }
