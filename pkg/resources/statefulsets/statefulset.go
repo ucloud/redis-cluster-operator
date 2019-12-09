@@ -137,7 +137,7 @@ func ClusterStatefulSetName(clusterName string, i int) string {
 }
 
 func ClusterHeadlessSvcName(name string, i int) string {
-	return fmt.Sprintf("drc-%s-%d", name, i)
+	return fmt.Sprintf("%s-%d", name, i)
 }
 
 func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) []string {

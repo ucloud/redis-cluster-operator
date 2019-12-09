@@ -253,7 +253,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 		if err := clustering.AllocSlots(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "AllocSlots")
 		}
-	} else if len(newMasters) > 0 {
+	} else if len(newMasters) > len(curMasters) {
 		ctx.reqLogger.Info("Scaling up")
 		if err := clusterCtx.PlaceSlaves(); err != nil {
 			return Cluster.Wrap(err, "PlaceSlaves")

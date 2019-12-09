@@ -61,6 +61,8 @@ func (c *Ctx) DispatchMasters() error {
 		if len(currentMasterNodes) == 0 {
 			master := c.PlaceMasters(ssName)
 			c.newMastersBySts[ssName] = master
+		} else if len(currentMasterNodes) == 1 {
+			c.newMastersBySts[ssName] = currentMasterNodes[0]
 		} else if len(currentMasterNodes) > 1 {
 			c.log.Error(fmt.Errorf("split brain"), "fix manually", "statefulSet", ssName, "masters", currentMasterNodes)
 			return fmt.Errorf("split brain: %s", ssName)
@@ -70,9 +72,14 @@ func (c *Ctx) DispatchMasters() error {
 }
 
 func (c *Ctx) PlaceMasters(ssName string) *redisutil.Node {
+	var allMasters redisutil.Nodes
+	allMasters = append(allMasters, c.currentMasters...)
+	for _, master := range c.newMastersBySts {
+		allMasters = append(allMasters, master)
+	}
 	nodes := c.nodes[ssName]
 	for _, cNode := range nodes {
-		_, err := c.currentMasters.GetNodesByFunc(func(node *redisutil.Node) bool {
+		_, err := allMasters.GetNodesByFunc(func(node *redisutil.Node) bool {
 			if node.NodeName == cNode.NodeName {
 				return true
 			}
