@@ -90,21 +90,25 @@ fi
 # cleanup data dump dir
 mkdir -p "$REDIS_DATA_DIR"
 cd "$REDIS_DATA_DIR"
-rm -rf *
 
 case "$op" in
   backup)
     echo "Dumping database......"
-    echo "Host ${REDIS_HOST}"
-    mkdir "$REDIS_SNAPSHOT"
-    cd "$REDIS_SNAPSHOT"
+    echo "DB Host ${REDIS_HOST}"
+    SOURCE_DIR="$REDIS_DATA_DIR"/"$REDIS_SNAPSHOT"
+    mkdir -p "$SOURCE_DIR"
+
+    cd "$SOURCE_DIR"
+    # cleanup data dump dir
+    rm -rf *
+
     redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
     redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
     pwd
-    ls -lh
+    ls -lh "$SOURCE_DIR"
     echo "Uploading dump file to the backend......."
-
-    osm --config "$OSM_CONFIG_FILE" sync "$REDIS_DATA_DIR"/"$REDIS_SNAPSHOT" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
+    echo "From $SOURCE_DIR"
+    osm --config "$OSM_CONFIG_FILE" copy "$SOURCE_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
