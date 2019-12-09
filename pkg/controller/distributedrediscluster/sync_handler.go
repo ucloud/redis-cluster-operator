@@ -136,94 +136,6 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	return nil
 }
 
-func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
-	cluster := ctx.cluster
-	admin := ctx.admin
-	clusterInfos := ctx.clusterInfos
-	if err := admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	cNbMaster := cluster.Spec.MasterSize
-	cReplicaFactor := cluster.Spec.ClusterReplicas
-	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
-	if err != nil {
-		return Cluster.Wrap(err, "newRedisCluster")
-	}
-
-	//currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
-	//if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
-	//	logger.V(3).Info("cluster ok")
-	//	return nil
-	//}
-
-	// First, we define the new masters
-	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
-	if err != nil {
-		return Cluster.Wrap(err, "DispatchMasters")
-	}
-	ctx.reqLogger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
-
-	// Second select Node that is already a slave
-	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
-
-	// New slaves are slaves which is currently a master with no slots
-	newSlave := nodes.FilterByFunc(func(nodeA *redisutil.Node) bool {
-		for _, nodeB := range newMasters {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		for _, nodeB := range currentSlaveNodes {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		return true
-	})
-
-	if 0 == len(curMasters) {
-		ctx.reqLogger.Info("Creating cluster")
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-
-		if err := clustering.AllocSlots(admin, newMasters); err != nil {
-			return Cluster.Wrap(err, "AllocSlots")
-		}
-	} else if len(newMasters) > len(curMasters) {
-		ctx.reqLogger.Info("Scaling cluster")
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-
-		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
-			return Cluster.Wrap(err, "RebalancedCluster")
-		}
-	} else if cluster.Status.MinReplicationFactor < cluster.Spec.ClusterReplicas {
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-	}
-
-	return nil
-}
-
 func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 	cluster := ctx.cluster
 	admin := ctx.admin
@@ -245,12 +157,11 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 			return Cluster.Wrap(err, "PlaceSlaves")
 
 		}
-		newRedisSlavesByMaster := clusterCtx.GetSlaves()
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 
-		if err := clustering.AllocSlots(admin, newMasters); err != nil {
+		if err := clusterCtx.AllocSlots(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "AllocSlots")
 		}
 	} else if len(newMasters) > len(curMasters) {
@@ -259,12 +170,11 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 			return Cluster.Wrap(err, "PlaceSlaves")
 
 		}
-		newRedisSlavesByMaster := clusterCtx.GetSlaves()
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 
-		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
+		if err := clusterCtx.RebalancedCluster(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "RebalancedCluster")
 		}
 	} else if cluster.Status.MinReplicationFactor < cluster.Spec.ClusterReplicas {
@@ -273,8 +183,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 			return Cluster.Wrap(err, "PlaceSlaves")
 
 		}
-		newRedisSlavesByMaster := clusterCtx.GetSlaves()
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 	} else if len(curMasters) > int(expectMasterNum) {
