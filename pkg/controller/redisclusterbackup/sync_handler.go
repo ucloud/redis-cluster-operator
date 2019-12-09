@@ -284,6 +284,12 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 			VolumeSource: backup.Spec.Backend.Local.VolumeSource,
 		})
 	}
+	if utils.IsClusterScoped() {
+		if job.Annotations == nil {
+			job.Annotations = make(map[string]string)
+		}
+		job.Annotations[utils.AnnotationScope] = utils.AnnotationClusterScoped
+	}
 
 	return job, nil
 }

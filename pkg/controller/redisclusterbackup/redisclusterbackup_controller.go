@@ -56,14 +56,51 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	pred := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.MetaNew) {
+				return false
+			}
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
+			// Ignore updates to CR status in which case metadata.Generation does not change
+			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true",
+					"old", e.ObjectOld, "new", e.ObjectNew)
+				return true
+			}
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
+			return true
+		},
+	}
+
 	// Watch for changes to primary resource RedisClusterBackup
-	err = c.Watch(&source.Kind{Type: &redisv1alpha1.RedisClusterBackup{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &redisv1alpha1.RedisClusterBackup{}}, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
 		return err
 	}
 
 	jobPred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			if !utils.ShoudManage(e.MetaNew) {
+				return false
+			}
 			oldObj := e.ObjectOld.(*batch.Job)
 			newObj := e.ObjectNew.(*batch.Job)
 			if isJobCompleted(oldObj, newObj) {
@@ -72,6 +109,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
 			job, ok := e.Object.(*batch.Job)
 			if !ok {
 				log.Error(nil, "Invalid Job object")
@@ -83,6 +123,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
 			job := e.Object.(*batch.Job)
 			if job.Status.Succeeded > 0 || job.Status.Failed >= utils.Int32(job.Spec.BackoffLimit) {
 				return true

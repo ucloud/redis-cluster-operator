@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -173,18 +172,5 @@ func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLog
 		return true
 	}
 
-	return false
-}
-
-func shoudManage(meta metav1.Object) bool {
-	if v, ok := meta.GetAnnotations()[utils.AnnotationScope]; ok {
-		if utils.IsClusterScoped() {
-			return v == utils.AnnotationClusterScoped
-		}
-	} else {
-		if !utils.IsClusterScoped() {
-			return true
-		}
-	}
 	return false
 }
