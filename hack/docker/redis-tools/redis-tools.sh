@@ -16,7 +16,6 @@ show_help() {
   echo "    --bucket=BUCKET                name of bucket"
   echo "    --folder=FOLDER                name of folder in bucket"
   echo "    --snapshot=SNAPSHOT            name of snapshot"
-  echo "    --enable-analytics=ENABLE_ANALYTICS   send analytical events to Google Analytics (default false)"
 }
 
 RETVAL=0
@@ -31,7 +30,6 @@ REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
 REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
 OSM_CONFIG_FILE=/etc/osm/config
-ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-false}
 
 op=$1
 shift
@@ -66,10 +64,6 @@ while test $# -gt 0; do
       export REDIS_SNAPSHOT=$(echo $1 | sed -e 's/^[^=]*=//g')
       shift
       ;;
-    --analytics* | --enable-analytics*)
-      export ENABLE_ANALYTICS=$(echo $1 | sed -e 's/^[^=]*=//g')
-      shift
-      ;;
     --)
       shift
       break
@@ -101,10 +95,16 @@ rm -rf *
 case "$op" in
   backup)
     echo "Dumping database......"
+    echo "Host ${REDIS_HOST}"
+    mkdir "$REDIS_SNAPSHOT"
+    cd "$REDIS_SNAPSHOT"
     redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
     redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
+    pwd
+    ls -lh
     echo "Uploading dump file to the backend......."
-    osm --config "$OSM_CONFIG_FILE" sync "$REDIS_DATA_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
+
+    osm --config "$OSM_CONFIG_FILE" sync "$REDIS_DATA_DIR"/"$REDIS_SNAPSHOT" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
