@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -72,9 +73,9 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 
 	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, ssName)
 	if err == nil {
-		if (cluster.Spec.ClusterReplicas + 1) != *ss.Spec.Replicas {
+		if shouldUpdateRedis(cluster, ss) {
 			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
-				Info("scaling statefulSet")
+				Info("updating statefulSet")
 			newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, backup, labels)
 			if err != nil {
 				return err
@@ -91,6 +92,30 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 		return r.statefulSetClient.CreateStatefulSet(newSS)
 	}
 	return err
+}
+
+func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *appsv1.StatefulSet) bool {
+	if (cluster.Spec.ClusterReplicas + 1) != *sts.Spec.Replicas {
+		return true
+	}
+	if cluster.Spec.Image != sts.Spec.Template.Spec.Containers[0].Image {
+		return true
+	}
+	expectResource := cluster.Spec.Resources
+	currentResource := sts.Spec.Template.Spec.Containers[0].Resources
+	if result := expectResource.Requests.Memory().Cmp(*currentResource.Requests.Memory()); result != 0 {
+		return true
+	}
+	if result := expectResource.Requests.Cpu().Cmp(*currentResource.Requests.Cpu()); result != 0 {
+		return true
+	}
+	if result := expectResource.Limits.Memory().Cmp(*currentResource.Limits.Memory()); result != 0 {
+		return true
+	}
+	if result := expectResource.Limits.Cpu().Cmp(*currentResource.Limits.Cpu()); result != 0 {
+		return true
+	}
+	return false
 }
 
 func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {
