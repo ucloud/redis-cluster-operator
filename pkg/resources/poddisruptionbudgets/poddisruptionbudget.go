@@ -8,13 +8,13 @@ import (
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 )
 
-func NewPodDisruptionBudgetForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *policyv1beta1.PodDisruptionBudget {
+func NewPodDisruptionBudgetForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) *policyv1beta1.PodDisruptionBudget {
 	maxUnavailable := intstr.FromInt(1)
 
 	return &policyv1beta1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:          labels,
-			Name:            cluster.Name,
+			Name:            name,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},

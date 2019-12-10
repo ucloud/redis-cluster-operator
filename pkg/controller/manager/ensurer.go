@@ -66,7 +66,7 @@ func (r *realEnsureResource) EnsureRedisStatefulsets(cluster *redisv1alpha1.Dist
 
 func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
 	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
-	if err := r.ensureRedisPDB(cluster, labels); err != nil {
+	if err := r.ensureRedisPDB(cluster, ssName, labels); err != nil {
 		return err
 	}
 
@@ -93,12 +93,12 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 	return err
 }
 
-func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.pdbClient.GetPodDisruptionBudget(cluster.Namespace, cluster.Name)
+func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {
+	_, err := r.pdbClient.GetPodDisruptionBudget(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("PDB.Namespace", cluster.Namespace, "PDB.Name", cluster.Spec.ServiceName).
+		r.logger.WithValues("PDB.Namespace", cluster.Namespace, "PDB.Name", name).
 			Info("creating a new PodDisruptionBudget")
-		pdb := poddisruptionbudgets.NewPodDisruptionBudgetForCR(cluster, labels)
+		pdb := poddisruptionbudgets.NewPodDisruptionBudgetForCR(cluster, name, labels)
 		return r.pdbClient.CreatePodDisruptionBudget(pdb)
 	}
 	return err
