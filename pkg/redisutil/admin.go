@@ -530,11 +530,12 @@ func (a *Admin) DelNode(id string) error {
 				log.Error(err, fmt.Sprintf("unable to get the connection for slave ID:%s, addr:%s", slave.ID, slave.IPPort()))
 				return err
 			}
-			resp := c.Cmd("SLAVEOF", "NO", "ONE")
-			if err = a.Connections().ValidateResp(resp, slave.IPPort(), "cannot stop replication"); err != nil {
+			resp := c.Cmd("CLUSTER", "RESET", "SOFT")
+			if err = a.Connections().ValidateResp(resp, slave.IPPort(), "cannot reset replication"); err != nil {
 				return err
 			}
-			log.Info(fmt.Sprintf("stop replication slave id: %s of master: %s", nodeinfos.Node.ID, id))
+			log.Info(fmt.Sprintf("reset replication slave id: %s of master: %s", nodeinfos.Node.ID, id))
+			continue
 		}
 
 		log.Info("CLUSTER FORGET", "id", id, "from", nodeAddr)

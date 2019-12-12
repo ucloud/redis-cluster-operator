@@ -46,6 +46,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
 	reconiler.serviceController = k8sutil.NewServiceController(reconiler.client)
 	reconiler.pdbController = k8sutil.NewPodDisruptionBudgetController(reconiler.client)
+	reconiler.pvcController = k8sutil.NewPvcController(reconiler.client)
 	reconiler.crController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
@@ -120,6 +121,7 @@ type ReconcileDistributedRedisCluster struct {
 	statefulSetController k8sutil.IStatefulSetControl
 	serviceController     k8sutil.IServiceControl
 	pdbController         k8sutil.IPodDisruptionBudgetControl
+	pvcController         k8sutil.IPvcControl
 	crController          k8sutil.ICustomResource
 }
 
@@ -162,7 +164,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	}
 
 	matchLabels := getLabels(instance)
-	redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(matchLabels)
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(instance.Namespace, matchLabels)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
@@ -278,7 +280,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 }
 
 func (r *ReconcileDistributedRedisCluster) isScalingDown(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
-	stsList, err := r.statefulSetController.ListStatefulSetByLabels(getLabels(cluster))
+	stsList, err := r.statefulSetController.ListStatefulSetByLabels(cluster.Namespace, getLabels(cluster))
 	if err != nil {
 		reqLogger.Error(err, "ListStatefulSetByLabels")
 		return false

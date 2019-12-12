@@ -209,10 +209,17 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
 		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
 		ctx.reqLogger.Info("scaling down", "statefulSet", stsName)
+		sts, err := r.statefulSetController.GetStatefulSet(cluster.Namespace, stsName)
+		if err != nil {
+			return Kubernetes.Wrap(err, "GetStatefulSet")
+		}
 		for _, node := range statefulSetNodes[stsName] {
 			ctx.reqLogger.Info("forgetNode", "id", node.ID, "ip", node.IP, "role", node.GetRole())
+			if len(node.Slots) > 0 {
+				return Redis.New(fmt.Sprintf("node %s is not empty! Reshard data away and try again", node.String()))
+			}
 			if err := admin.DelNode(node.ID); err != nil {
-				return err
+				return Redis.Wrap(err, "DelNode")
 			}
 		}
 		// remove resource
@@ -225,6 +232,9 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 		}
 		if err := r.pdbController.DeletePodDisruptionBudgetByName(cluster.Namespace, stsName); err != nil {
 			ctx.reqLogger.Error(err, "DeletePodDisruptionBudgetByName", "pdb", stsName)
+		}
+		if err := r.pvcController.DeletePvcByLabels(cluster.Namespace, sts.Labels); err != nil {
+			ctx.reqLogger.Error(err, "DeletePvcByLabels", "labels", sts.Labels)
 		}
 	}
 	return nil
