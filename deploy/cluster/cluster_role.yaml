@@ -29,6 +29,7 @@ rules:
       - patch
       - update
       - watch
+      - delete
   - apiGroups:
       - ""
     resources:
@@ -48,6 +49,7 @@ rules:
       - patch
       - update
       - watch
+      - delete
   - apiGroups:
       - apps
     resources:
@@ -61,6 +63,7 @@ rules:
       - patch
       - update
       - watch
+      - delete
   - apiGroups:
       - policy
     resources:
@@ -72,6 +75,7 @@ rules:
       - patch
       - update
       - watch
+      - delete
   - apiGroups:
       - apps
     resourceNames:

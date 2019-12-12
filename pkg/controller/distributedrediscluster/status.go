@@ -21,8 +21,8 @@ func SetClusterOK(status *redisv1alpha1.DistributedRedisClusterStatus, reason st
 	status.Reason = reason
 }
 
-func SetClusterCreating(status *redisv1alpha1.DistributedRedisClusterStatus, reason string) {
-	status.Status = redisv1alpha1.ClusterStatusCreating
+func SetClusterRebalancing(status *redisv1alpha1.DistributedRedisClusterStatus, reason string) {
+	status.Status = redisv1alpha1.ClusterStatusRebalancing
 	status.Reason = reason
 }
 

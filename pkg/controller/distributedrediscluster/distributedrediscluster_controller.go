@@ -3,6 +3,7 @@ package distributedrediscluster
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +44,8 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler := &ReconcileDistributedRedisCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
+	reconiler.serviceController = k8sutil.NewServiceController(reconiler.client)
+	reconiler.pdbController = k8sutil.NewPodDisruptionBudgetController(reconiler.client)
 	reconiler.crController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
@@ -115,6 +118,8 @@ type ReconcileDistributedRedisCluster struct {
 	ensurer               clustermanger.IEnsureResource
 	checker               clustermanger.ICheck
 	statefulSetController k8sutil.IStatefulSetControl
+	serviceController     k8sutil.IServiceControl
+	pdbController         k8sutil.IPodDisruptionBudgetControl
 	crController          k8sutil.ICustomResource
 }
 
@@ -242,6 +247,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	}
 
 	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
+	if is := r.isScalingDown(instance, reqLogger); is {
+		SetClusterRebalancing(status, "scaling down")
+	}
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
 	r.updateClusterIfNeed(instance, status)
 
@@ -267,4 +275,16 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
 	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+}
+
+func (r *ReconcileDistributedRedisCluster) isScalingDown(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
+	stsList, err := r.statefulSetController.ListStatefulSetByLabels(getLabels(cluster))
+	if err != nil {
+		reqLogger.Error(err, "ListStatefulSetByLabels")
+		return false
+	}
+	if len(stsList.Items) > int(cluster.Spec.MasterSize) {
+		return true
+	}
+	return false
 }

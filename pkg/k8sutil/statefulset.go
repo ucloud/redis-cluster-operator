@@ -17,8 +17,10 @@ type IStatefulSetControl interface {
 	UpdateStatefulSet(*appsv1.StatefulSet) error
 	// DeleteStatefulSet deletes a StatefulSet in a DistributedRedisCluster.
 	DeleteStatefulSet(*appsv1.StatefulSet) error
+	DeleteStatefulSetByName(namespace, name string) error
 	// GetStatefulSet get StatefulSet in a DistributedRedisCluster.
 	GetStatefulSet(namespace, name string) (*appsv1.StatefulSet, error)
+	ListStatefulSetByLabels(labels map[string]string) (*appsv1.StatefulSetList, error)
 	// GetStatefulSetPods will retrieve the pods managed by a given StatefulSet.
 	GetStatefulSetPods(namespace, name string) (*corev1.PodList, error)
 	GetStatefulSetPodsByLabels(labels map[string]string) (*corev1.PodList, error)
@@ -47,6 +49,14 @@ func (s *stateFulSetController) UpdateStatefulSet(ss *appsv1.StatefulSet) error 
 // DeleteStatefulSet implement the IStatefulSetControl.Interface.
 func (s *stateFulSetController) DeleteStatefulSet(ss *appsv1.StatefulSet) error {
 	return s.client.Delete(context.TODO(), ss)
+}
+
+func (s *stateFulSetController) DeleteStatefulSetByName(namespace, name string) error {
+	sts, err := s.GetStatefulSet(namespace, name)
+	if err != nil {
+		return err
+	}
+	return s.DeleteStatefulSet(sts)
 }
 
 // GetStatefulSet implement the IStatefulSetControl.Interface.
@@ -80,4 +90,10 @@ func (s *stateFulSetController) GetStatefulSetPodsByLabels(labels map[string]str
 	foundPods := &corev1.PodList{}
 	err := s.client.List(context.TODO(), foundPods, client.MatchingLabels(labels))
 	return foundPods, err
+}
+
+func (s *stateFulSetController) ListStatefulSetByLabels(labels map[string]string) (*appsv1.StatefulSetList, error) {
+	foundSts := &appsv1.StatefulSetList{}
+	err := s.client.List(context.TODO(), foundSts, client.MatchingLabels(labels))
+	return foundSts, err
 }

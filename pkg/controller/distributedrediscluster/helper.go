@@ -73,54 +73,6 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redi
 	return redisutil.NewAdmin(nodesAddrs, &adminConfig), nil
 }
 
-func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	mastersCount := int(cluster.Spec.MasterSize)
-	clusterReplicas := cluster.Spec.ClusterReplicas
-	expectPodNum := mastersCount * int(clusterReplicas+1)
-
-	if len(clusterInfos.Infos) != expectPodNum {
-		return fmt.Errorf("node num different from expectation")
-	}
-
-	logger.Info(fmt.Sprintf(">>> Performing hash slots allocation on %d nodes...", expectPodNum))
-
-	masterNodes := make(redisutil.Nodes, mastersCount)
-	i := 0
-	k := 0
-	slotsPerNode := redisutil.DefaultHashMaxSlots / mastersCount
-	first := 0
-	cursor := 0
-	for _, nodeInfo := range clusterInfos.Infos {
-		if i < mastersCount {
-			nodeInfo.Node.Role = redisutil.RedisMasterRole
-			last := cursor + slotsPerNode - 1
-			if last > redisutil.DefaultHashMaxSlots+1 || i == mastersCount-1 {
-				last = redisutil.DefaultHashMaxSlots
-			}
-			logger.Info(fmt.Sprintf("Master[%d] -> Slots %d - %d", i, first, last))
-			nodeInfo.Node.Slots = redisutil.BuildSlotSlice(redisutil.Slot(first), redisutil.Slot(last))
-			first = last + 1
-			cursor += slotsPerNode
-			masterNodes[i] = nodeInfo.Node
-		} else {
-			if k > mastersCount {
-				k = 0
-			}
-			logger.Info(fmt.Sprintf("Adding replica %s:%s to %s:%s", nodeInfo.Node.IP, nodeInfo.Node.Port,
-				masterNodes[k].IP, masterNodes[k].Port))
-			nodeInfo.Node.Role = redisutil.RedisSlaveRole
-			nodeInfo.Node.MasterReferent = masterNodes[k].ID
-			k++
-		}
-		i++
-	}
-
-	log.Info(clusterInfos.GetNodes().String())
-
-	return nil
-}
-
 func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.DistributedRedisCluster) (*redisutil.Cluster, redisutil.Nodes, error) {
 	// now we can trigger the rebalance
 	nodes := infos.GetNodes()

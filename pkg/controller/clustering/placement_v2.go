@@ -7,24 +7,29 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 type Ctx struct {
-	log             logr.Logger
-	cluster         *redisutil.Cluster
-	nodes           map[string]redisutil.Nodes
-	currentMasters  redisutil.Nodes
-	newMastersBySts map[string]*redisutil.Node
-	slavesByMaster  map[string]redisutil.Nodes
-	bestEffort      bool
+	log               logr.Logger
+	expectedMasterNum int
+	clusterName       string
+	cluster           *redisutil.Cluster
+	nodes             map[string]redisutil.Nodes
+	currentMasters    redisutil.Nodes
+	newMastersBySts   map[string]*redisutil.Node
+	slavesByMaster    map[string]redisutil.Nodes
+	bestEffort        bool
 }
 
-func NewCtx(cluster *redisutil.Cluster, nodes redisutil.Nodes, log logr.Logger) *Ctx {
+func NewCtx(cluster *redisutil.Cluster, nodes redisutil.Nodes, masterNum int32, clusterName string, log logr.Logger) *Ctx {
 	ctx := &Ctx{
-		log:             log,
-		cluster:         cluster,
-		slavesByMaster:  make(map[string]redisutil.Nodes),
-		newMastersBySts: make(map[string]*redisutil.Node),
+		log:               log,
+		expectedMasterNum: int(masterNum),
+		clusterName:       clusterName,
+		cluster:           cluster,
+		slavesByMaster:    make(map[string]redisutil.Nodes),
+		newMastersBySts:   make(map[string]*redisutil.Node),
 	}
 	ctx.nodes = ctx.sortRedisNodeByStatefulSet(nodes)
 	return ctx
@@ -56,18 +61,36 @@ func (c *Ctx) sortRedisNodeByStatefulSet(nodes redisutil.Nodes) map[string]redis
 }
 
 func (c *Ctx) DispatchMasters() error {
-	for ssName, nodes := range c.nodes {
+	for i := 0; i < c.expectedMasterNum; i++ {
+		stsName := statefulsets.ClusterStatefulSetName(c.clusterName, i)
+		nodes, ok := c.nodes[stsName]
+		if !ok {
+			return fmt.Errorf("missing statefulset %s", stsName)
+		}
 		currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
 		if len(currentMasterNodes) == 0 {
-			master := c.PlaceMasters(ssName)
-			c.newMastersBySts[ssName] = master
+			master := c.PlaceMasters(stsName)
+			c.newMastersBySts[stsName] = master
 		} else if len(currentMasterNodes) == 1 {
-			c.newMastersBySts[ssName] = currentMasterNodes[0]
+			c.newMastersBySts[stsName] = currentMasterNodes[0]
 		} else if len(currentMasterNodes) > 1 {
-			c.log.Error(fmt.Errorf("split brain"), "fix manually", "statefulSet", ssName, "masters", currentMasterNodes)
-			return fmt.Errorf("split brain: %s", ssName)
+			c.log.Error(fmt.Errorf("split brain"), "fix manually", "statefulSet", stsName, "masters", currentMasterNodes)
+			return fmt.Errorf("split brain: %s", stsName)
 		}
 	}
+
+	//for ssName, nodes := range c.nodes {
+	//	currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
+	//	if len(currentMasterNodes) == 0 {
+	//		master := c.PlaceMasters(ssName)
+	//		c.newMastersBySts[ssName] = master
+	//	} else if len(currentMasterNodes) == 1 {
+	//		c.newMastersBySts[ssName] = currentMasterNodes[0]
+	//	} else if len(currentMasterNodes) > 1 {
+	//		c.log.Error(fmt.Errorf("split brain"), "fix manually", "statefulSet", ssName, "masters", currentMasterNodes)
+	//		return fmt.Errorf("split brain: %s", ssName)
+	//	}
+	//}
 	return nil
 }
 
@@ -131,4 +154,8 @@ func (c *Ctx) GetNewMasters() redisutil.Nodes {
 
 func (c *Ctx) GetSlaves() map[string]redisutil.Nodes {
 	return c.slavesByMaster
+}
+
+func (c *Ctx) GetStatefulsetNodes() map[string]redisutil.Nodes {
+	return c.nodes
 }

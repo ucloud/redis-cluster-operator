@@ -12,6 +12,7 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 const (
@@ -145,7 +146,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 	if err != nil {
 		return Cluster.Wrap(err, "newRedisCluster")
 	}
-	clusterCtx := clustering.NewCtx(rCluster, nodes, ctx.reqLogger)
+	clusterCtx := clustering.NewCtx(rCluster, nodes, cluster.Spec.MasterSize, cluster.Name, ctx.reqLogger)
 	if err := clusterCtx.DispatchMasters(); err != nil {
 		return Cluster.Wrap(err, "DispatchMasters")
 	}
@@ -188,6 +189,43 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 		}
 	} else if len(curMasters) > int(expectMasterNum) {
 		ctx.reqLogger.Info("Scaling down")
+		var allMaster redisutil.Nodes
+		allMaster = append(allMaster, newMasters...)
+		allMaster = append(allMaster, curMasters...)
+		if err := clusterCtx.DispatchSlotToNewMasters(admin, newMasters, curMasters, allMaster); err != nil {
+			return err
+		}
+		if err := r.scalingDown(ctx, len(curMasters), clusterCtx.GetStatefulsetNodes()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, currentMasterNum int, statefulSetNodes map[string]redisutil.Nodes) error {
+	cluster := ctx.cluster
+	admin := ctx.admin
+	expectMasterNum := int(cluster.Spec.MasterSize)
+	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
+		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		ctx.reqLogger.Info("scaling down", "statefulSet", stsName)
+		for _, node := range statefulSetNodes[stsName] {
+			ctx.reqLogger.Info("forgetNode", "id", node.ID, "ip", node.IP, "role", node.GetRole())
+			if err := admin.DelNode(node.ID); err != nil {
+				return err
+			}
+		}
+		// remove resource
+		if err := r.statefulSetController.DeleteStatefulSetByName(cluster.Namespace, stsName); err != nil {
+			ctx.reqLogger.Error(err, "DeleteStatefulSetByName", "statefulSet", stsName)
+		}
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Name, i)
+		if err := r.serviceController.DeleteServiceByName(cluster.Namespace, svcName); err != nil {
+			ctx.reqLogger.Error(err, "DeleteServiceByName", "service", svcName)
+		}
+		if err := r.pdbController.DeletePodDisruptionBudgetByName(cluster.Namespace, stsName); err != nil {
+			ctx.reqLogger.Error(err, "DeletePodDisruptionBudgetByName", "pdb", stsName)
+		}
 	}
 	return nil
 }
