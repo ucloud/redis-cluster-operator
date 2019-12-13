@@ -248,7 +248,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, Redis.Wrap(err, "SetConfigIfNeed")
 	}
 
-	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
+	status := buildClusterStatus(clusterInfos, ctx.pods, &instance.Status)
 	if is := r.isScalingDown(instance, reqLogger); is {
 		SetClusterRebalancing(status, "scaling down")
 	}
@@ -273,7 +273,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}
-	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
+	newStatus := buildClusterStatus(newClusterInfos, ctx.pods, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
 	return reconcile.Result{RequeueAfter: requeueEnsure}, nil

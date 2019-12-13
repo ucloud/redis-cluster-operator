@@ -31,7 +31,7 @@ func SetClusterScaling(status *redisv1alpha1.DistributedRedisClusterStatus, reas
 	status.Reason = reason
 }
 
-func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []corev1.Pod, oldStatus *redisv1alpha1.DistributedRedisClusterStatus) *redisv1alpha1.DistributedRedisClusterStatus {
+func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod, oldStatus *redisv1alpha1.DistributedRedisClusterStatus) *redisv1alpha1.DistributedRedisClusterStatus {
 	status := &redisv1alpha1.DistributedRedisClusterStatus{
 		Status:           oldStatus.Status,
 		Reason:           oldStatus.Reason,

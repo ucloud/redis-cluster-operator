@@ -208,6 +208,12 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 	expectMasterNum := int(cluster.Spec.MasterSize)
 	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
 		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		for _, node := range statefulSetNodes[stsName] {
+			admin.Connections().Remove(node.IPPort())
+		}
+	}
+	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
+		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
 		ctx.reqLogger.Info("scaling down", "statefulSet", stsName)
 		sts, err := r.statefulSetController.GetStatefulSet(cluster.Namespace, stsName)
 		if err != nil {
@@ -218,8 +224,8 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 			if len(node.Slots) > 0 {
 				return Redis.New(fmt.Sprintf("node %s is not empty! Reshard data away and try again", node.String()))
 			}
-			if err := admin.DelNode(node.ID); err != nil {
-				return Redis.Wrap(err, "DelNode")
+			if err := admin.ForgetNode(node.ID); err != nil {
+				return Redis.Wrap(err, "ForgetNode")
 			}
 		}
 		// remove resource

@@ -102,8 +102,11 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 	var podSlice []*corev1.Pod
 	for _, pod := range pods {
-		podPointer := pod
-		podSlice = append(podSlice, &podPointer)
+		// Only work with running pods
+		if pod.Status.Phase == corev1.PodRunning {
+			podPointer := pod
+			podSlice = append(podSlice, &podPointer)
+		}
 	}
 	return podSlice
 }

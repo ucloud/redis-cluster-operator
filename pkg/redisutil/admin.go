@@ -57,7 +57,6 @@ type IAdmin interface {
 	//StartFailover(addr string) error
 	// ForgetNode execute the Redis command to force the cluster to forgot the the Node
 	ForgetNode(id string) error
-	DelNode(id string) error
 	//// ForgetNodeByAddr execute the Redis command to force the cluster to forgot the the Node
 	//ForgetNodeByAddr(id string) error
 	// SetSlots exec the redis command to set slots in a pipeline, provide
@@ -326,8 +325,6 @@ func (a *Admin) AttachNodeToCluster(addr string) error {
 		return err
 	}
 
-	log.V(3).Info("AttachNodeToCluster", "ip", ip, "port", port, "addr", addr)
-
 	all := a.Connections().GetAll()
 	if len(all) == 0 {
 		return fmt.Errorf("no connection for other redis-node found")
@@ -336,7 +333,7 @@ func (a *Admin) AttachNodeToCluster(addr string) error {
 		if cAddr == addr {
 			continue
 		}
-		log.V(3).Info("CLUSTER MEET", "addr", cAddr)
+		log.V(3).Info("CLUSTER MEET", "from addr", cAddr, "to", addr)
 		resp := c.Cmd("CLUSTER", "MEET", ip, port)
 		if err = a.Connections().ValidateResp(resp, addr, "cannot attach node to cluster"); err != nil {
 			return err
@@ -490,15 +487,18 @@ func (a *Admin) ForgetNode(id string) error {
 		if nodeinfos.Node.ID == id {
 			continue
 		}
+
+		if IsSlave(nodeinfos.Node) && nodeinfos.Node.MasterReferent == id {
+			if err := a.DetachSlave(nodeinfos.Node); err != nil {
+				log.Error(err, "DetachSlave", "node", nodeAddr)
+			}
+			log.Info(fmt.Sprintf("detach slave id: %s of master: %s", nodeinfos.Node.ID, id))
+		}
+
 		c, err := a.Connections().Get(nodeAddr)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("cannot force a forget on node %s, for node %s", nodeAddr, id))
 			continue
-		}
-
-		if IsSlave(nodeinfos.Node) && nodeinfos.Node.MasterReferent == id {
-			a.DetachSlave(nodeinfos.Node)
-			log.Info(fmt.Sprintf("detach slave id: %s of master: %s", nodeinfos.Node.ID, id))
 		}
 
 		log.Info("CLUSTER FORGET", "id", id, "from", nodeAddr)
@@ -507,43 +507,6 @@ func (a *Admin) ForgetNode(id string) error {
 	}
 
 	log.Info("Forget node done", "node", id)
-	return nil
-}
-
-// DelNode used to del a redis node from existed cluster
-func (a *Admin) DelNode(id string) error {
-	infos, _ := a.GetClusterInfos()
-	for nodeAddr, nodeinfos := range infos.Infos {
-		if nodeinfos.Node.ID == id {
-			continue
-		}
-		c, err := a.Connections().Get(nodeAddr)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("cannot force a forget on node %s, for node %s", nodeAddr, id))
-			continue
-		}
-
-		if IsSlave(nodeinfos.Node) && nodeinfos.Node.MasterReferent == id {
-			slave := nodeinfos.Node
-			c, err := a.Connections().Get(slave.IPPort())
-			if err != nil {
-				log.Error(err, fmt.Sprintf("unable to get the connection for slave ID:%s, addr:%s", slave.ID, slave.IPPort()))
-				return err
-			}
-			resp := c.Cmd("CLUSTER", "RESET", "SOFT")
-			if err = a.Connections().ValidateResp(resp, slave.IPPort(), "cannot reset replication"); err != nil {
-				return err
-			}
-			log.Info(fmt.Sprintf("reset replication slave id: %s of master: %s", nodeinfos.Node.ID, id))
-			continue
-		}
-
-		log.Info("CLUSTER FORGET", "id", id, "from", nodeAddr)
-		resp := c.Cmd("CLUSTER", "FORGET", id)
-		a.Connections().ValidateResp(resp, nodeAddr, "Unable to execute FORGET command")
-	}
-
-	log.Info("del node done", "node", id)
 	return nil
 }
 
