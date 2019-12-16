@@ -242,6 +242,19 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 		if err := r.pvcController.DeletePvcByLabels(cluster.Namespace, sts.Labels); err != nil {
 			ctx.reqLogger.Error(err, "DeletePvcByLabels", "labels", sts.Labels)
 		}
+		// wait pod Terminating
+		waiter := &waitPodTerminating{
+			name:                  "waitPodTerminating",
+			statefulSet:           stsName,
+			timeout:               30 * time.Second,
+			tick:                  2 * time.Second,
+			statefulSetController: r.statefulSetController,
+			cluster:               cluster,
+		}
+		if err := waiting(waiter, ctx.reqLogger); err != nil {
+			return err
+		}
+
 	}
 	return nil
 }

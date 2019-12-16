@@ -195,7 +195,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}
 
-	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf())
+	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf(), reqLogger)
 	if err != nil {
 		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
 	}

@@ -11,6 +11,7 @@ const (
 	OperatorName      = "redis-cluster-operator"
 	LabelManagedByKey = "managed-by"
 	LabelNameKey      = "distributed-redis-cluster"
+	StatefulSetLabel  = "statefulSet"
 )
 
 // RedisRole RedisCluster Node Role type

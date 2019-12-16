@@ -17,8 +17,6 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
-const labelKey = "statefulSet"
-
 type IEnsureResource interface {
 	EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster,
 		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
@@ -57,7 +55,7 @@ func (r *realEnsureResource) EnsureRedisStatefulsets(cluster *redisv1alpha1.Dist
 		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
 		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
 		// assign label
-		labels[labelKey] = name
+		labels[redisv1alpha1.StatefulSetLabel] = name
 		if err := r.ensureRedisStatefulset(cluster, name, svcName, backup, labels); err != nil {
 			return err
 		}
@@ -134,7 +132,7 @@ func (r *realEnsureResource) EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.Dist
 		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
 		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
 		// assign label
-		labels[labelKey] = name
+		labels[redisv1alpha1.StatefulSetLabel] = name
 		if err := r.ensureRedisHeadLessSvc(cluster, svcName, labels); err != nil {
 			return err
 		}
@@ -155,7 +153,7 @@ func (r *realEnsureResource) ensureRedisHeadLessSvc(cluster *redisv1alpha1.Distr
 
 func (r *realEnsureResource) EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	name := cluster.Spec.ServiceName
-	delete(labels, labelKey)
+	delete(labels, redisv1alpha1.StatefulSetLabel)
 	_, err := r.svcClient.GetService(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
 		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).

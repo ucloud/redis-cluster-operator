@@ -13,6 +13,7 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
@@ -48,7 +49,7 @@ func getClusterPassword(client client.Client, cluster *redisv1alpha1.Distributed
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
@@ -61,7 +62,7 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redi
 				}
 			}
 		}
-		log.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
+		reqLogger.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
 		nodesAddrs = append(nodesAddrs, net.JoinHostPort(pod.Status.PodIP, redisPort))
 	}
 	adminConfig := redisutil.AdminOptions{
@@ -128,4 +129,69 @@ func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLog
 	}
 
 	return false
+}
+
+type IWaitHandle interface {
+	Name() string
+	Tick() time.Duration
+	Timeout() time.Duration
+	Handler() error
+}
+
+// waiting will keep trying to handler.Handler() until either
+// we get a result from handler.Handler() or the timeout expires
+func waiting(handler IWaitHandle, reqLogger logr.Logger) error {
+	timeout := time.After(handler.Timeout())
+	tick := time.Tick(handler.Tick())
+	// Keep trying until we're timed out or got a result or got an error
+	for {
+		select {
+		// Got a timeout! fail with a timeout error
+		case <-timeout:
+			return fmt.Errorf("%s timed out", handler.Name())
+		// Got a tick, we should check on Handler()
+		case <-tick:
+			err := handler.Handler()
+			if err == nil {
+				return nil
+			}
+			reqLogger.V(4).Info(err.Error())
+		}
+	}
+}
+
+type waitPodTerminating struct {
+	name                  string
+	statefulSet           string
+	timeout               time.Duration
+	tick                  time.Duration
+	statefulSetController k8sutil.IStatefulSetControl
+	cluster               *redisv1alpha1.DistributedRedisCluster
+}
+
+func (w *waitPodTerminating) Name() string {
+	return w.name
+}
+
+func (w *waitPodTerminating) Tick() time.Duration {
+	return w.tick
+}
+
+func (w *waitPodTerminating) Timeout() time.Duration {
+	return w.timeout
+}
+
+func (w *waitPodTerminating) Handler() error {
+	labels := getLabels(w.cluster)
+	labels[redisv1alpha1.StatefulSetLabel] = w.statefulSet
+	podList, err := w.statefulSetController.GetStatefulSetPodsByLabels(w.cluster.Namespace, labels)
+	if err != nil {
+		return err
+	}
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return fmt.Errorf("[%s] pod already runing", pod.Name)
+		}
+	}
+	return nil
 }
