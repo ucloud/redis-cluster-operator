@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	requeueAfter  = 10 * time.Second
-	requeueEnsure = 60 * time.Second
+	requeueAfter = 10 * time.Second
 )
 
 type syncContext struct {

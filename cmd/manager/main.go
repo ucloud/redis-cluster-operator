@@ -29,6 +29,8 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/apis"
 	config2 "github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/distributedrediscluster"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/redisclusterbackup"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 	"github.com/ucloud/redis-cluster-operator/version"
 )
@@ -52,6 +54,9 @@ func main() {
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
 	pflag.CommandLine.AddFlagSet(zap.FlagSet())
+
+	pflag.CommandLine.AddFlagSet(distributedrediscluster.FlagSet())
+	pflag.CommandLine.AddFlagSet(redisclusterbackup.FlagSet())
 
 	// Add flags registered by imported packages (e.g. glog and
 	// controller-runtime)

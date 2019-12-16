@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	batch "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,9 +24,24 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
-var log = logf.Log.WithName("controller_redisclusterbackup")
+var (
+	log = logf.Log.WithName("controller_redisclusterbackup")
+
+	controllerFlagSet *pflag.FlagSet
+	// maxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run. Defaults to 1.
+	maxConcurrentReconciles int
+)
 
 const backupFinalizer = "finalizer.backup.redis.kun"
+
+func init() {
+	controllerFlagSet = pflag.NewFlagSet("controller", pflag.ExitOnError)
+	controllerFlagSet.IntVar(&maxConcurrentReconciles, "ctr-maxconcurrent", 1, "the maximum number of concurrent Reconciles which can be run. Defaults to 1.")
+}
+
+func FlagSet() *pflag.FlagSet {
+	return controllerFlagSet
+}
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -51,7 +67,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("redisclusterbackup-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("redisclusterbackup-controller", mgr, controller.Options{Reconciler: r, MaxConcurrentReconciles: maxConcurrentReconciles})
 	if err != nil {
 		return err
 	}

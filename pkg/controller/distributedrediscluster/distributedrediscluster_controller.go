@@ -2,8 +2,10 @@ package distributedrediscluster
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,9 +27,25 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
-var log = logf.Log.WithName("controller_distributedrediscluster")
+var (
+	log = logf.Log.WithName("controller_distributedrediscluster")
 
-const maxConcurrentReconciles = 2
+	controllerFlagSet *pflag.FlagSet
+	// maxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run. Defaults to 4.
+	maxConcurrentReconciles int
+	// reconcileTime is the delay between reconciliations. Defaults to 60s.
+	reconcileTime int
+)
+
+func init() {
+	controllerFlagSet = pflag.NewFlagSet("controller", pflag.ExitOnError)
+	controllerFlagSet.IntVar(&maxConcurrentReconciles, "ctr-maxconcurrent", 4, "the maximum number of concurrent Reconciles which can be run. Defaults to 4.")
+	controllerFlagSet.IntVar(&reconcileTime, "ctr-reconciletime", 60, "")
+}
+
+func FlagSet() *pflag.FlagSet {
+	return controllerFlagSet
+}
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -276,7 +294,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	newStatus := buildClusterStatus(newClusterInfos, ctx.pods, &instance.Status)
 	SetClusterOK(newStatus, "OK")
 	r.updateClusterIfNeed(instance, newStatus)
-	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	return reconcile.Result{RequeueAfter: time.Duration(reconcileTime) * time.Second}, nil
 }
 
 func (r *ReconcileDistributedRedisCluster) isScalingDown(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
