@@ -105,11 +105,6 @@ func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.Distr
 }
 
 func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) error {
-	//logger.Info(">>> Assign a different config epoch to each node")
-	//err := admin.SetConfigEpoch()
-	//if err != nil {
-	//	return Redis.Wrap(err, "SetConfigEpoch")
-	//}
 	if infos, err := ctx.admin.GetClusterInfos(); err == nil {
 		ctx.reqLogger.V(6).Info("debug waitForClusterJoin", "cluster infos", infos)
 		return nil

@@ -79,18 +79,6 @@ func (c *Ctx) DispatchMasters() error {
 		}
 	}
 
-	//for ssName, nodes := range c.nodes {
-	//	currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
-	//	if len(currentMasterNodes) == 0 {
-	//		master := c.PlaceMasters(ssName)
-	//		c.newMastersBySts[ssName] = master
-	//	} else if len(currentMasterNodes) == 1 {
-	//		c.newMastersBySts[ssName] = currentMasterNodes[0]
-	//	} else if len(currentMasterNodes) > 1 {
-	//		c.log.Error(fmt.Errorf("split brain"), "fix manually", "statefulSet", ssName, "masters", currentMasterNodes)
-	//		return fmt.Errorf("split brain: %s", ssName)
-	//	}
-	//}
 	return nil
 }
 
