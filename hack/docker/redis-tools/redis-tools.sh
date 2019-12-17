@@ -118,7 +118,7 @@ case "$op" in
       echo "Has been restored successfully"
       exit 0
     fi
-    index=$(echo "${POD_NAME}" | awk -F- '{print $NF}')
+    index=$(echo "${POD_NAME}" | awk -F- '{print $(NF-1)}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
     osm --config "$OSM_CONFIG_FILE" sync ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR" -v
 

@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
@@ -41,9 +42,16 @@ func (in *DistributedRedisCluster) Validate(log logr.Logger) {
 		in.Spec.Resources = defaultResource()
 	}
 
-	renameCmds := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
-	for key, value := range renameCmds {
+	renameCmdMap := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
+	renameCmdSlice := make([]string, len(renameCmdMap))
+	i := 0
+	for key, value := range renameCmdMap {
 		cmd := fmt.Sprintf("--rename-command %s %s", key, value)
+		renameCmdSlice[i] = cmd
+		i++
+	}
+	sort.Strings(renameCmdSlice)
+	for _, cmd := range renameCmdSlice {
 		in.Spec.Command = append(in.Spec.Command, cmd)
 	}
 

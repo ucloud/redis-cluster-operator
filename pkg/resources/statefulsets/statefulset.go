@@ -276,7 +276,6 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *
 			redisv1alpha1.JobTypeRestore,
 			fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
 			fmt.Sprintf(`--bucket=%s`, bucket),
-			fmt.Sprintf(`--enable-analytics=%v`, "false"),
 			fmt.Sprintf(`--folder=%s`, folderName),
 			fmt.Sprintf(`--snapshot=%s`, backup.Name),
 			"--",

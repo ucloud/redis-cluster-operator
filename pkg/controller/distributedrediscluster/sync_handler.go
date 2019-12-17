@@ -151,6 +151,7 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 	}
 	curMasters := clusterCtx.GetCurrentMasters()
 	newMasters := clusterCtx.GetNewMasters()
+	ctx.reqLogger.Info("masters", "newMasters", len(newMasters), "curMasters", len(curMasters))
 	if len(curMasters) == 0 {
 		ctx.reqLogger.Info("Creating cluster")
 		if err := clusterCtx.PlaceSlaves(); err != nil {
