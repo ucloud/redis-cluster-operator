@@ -245,13 +245,13 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 		waiter := &waitPodTerminating{
 			name:                  "waitPodTerminating",
 			statefulSet:           stsName,
-			timeout:               30 * time.Second,
-			tick:                  2 * time.Second,
+			timeout:               30 * time.Second * time.Duration(cluster.Spec.ClusterReplicas+2),
+			tick:                  5 * time.Second,
 			statefulSetController: r.statefulSetController,
 			cluster:               cluster,
 		}
 		if err := waiting(waiter, ctx.reqLogger); err != nil {
-			return err
+			ctx.reqLogger.Error(err, "waitPodTerminating")
 		}
 
 	}
