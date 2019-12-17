@@ -19,7 +19,7 @@ import (
 
 type IEnsureResource interface {
 	EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster,
-		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
+		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (bool, error)
 	EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
@@ -50,23 +50,26 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 }
 
 func (r *realEnsureResource) EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster,
-	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
+	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (bool, error) {
+	updated := false
 	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
 		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
 		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
 		// assign label
 		labels[redisv1alpha1.StatefulSetLabel] = name
-		if err := r.ensureRedisStatefulset(cluster, name, svcName, backup, labels); err != nil {
-			return err
+		if stsUpdated, err := r.ensureRedisStatefulset(cluster, name, svcName, backup, labels); err != nil {
+			return false, err
+		} else if stsUpdated {
+			updated = stsUpdated
 		}
 	}
-	return nil
+	return updated, nil
 }
 
 func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
-	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
+	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (bool, error) {
 	if err := r.ensureRedisPDB(cluster, ssName, labels); err != nil {
-		return err
+		return false, err
 	}
 
 	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, ssName)
@@ -76,20 +79,20 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 				Info("updating statefulSet")
 			newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, backup, labels)
 			if err != nil {
-				return err
+				return false, err
 			}
-			return r.statefulSetClient.UpdateStatefulSet(newSS)
+			return true, r.statefulSetClient.UpdateStatefulSet(newSS)
 		}
 	} else if err != nil && errors.IsNotFound(err) {
 		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
 			Info("creating a new statefulSet")
 		newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, backup, labels)
 		if err != nil {
-			return err
+			return false, err
 		}
-		return r.statefulSetClient.CreateStatefulSet(newSS)
+		return false, r.statefulSetClient.CreateStatefulSet(newSS)
 	}
-	return err
+	return false, err
 }
 
 func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *appsv1.StatefulSet) bool {
@@ -99,12 +102,14 @@ func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *apps
 	if cluster.Spec.Image != sts.Spec.Template.Spec.Containers[0].Image {
 		return true
 	}
-	if cluster.Spec.PasswordSecret != nil && cluster.Status.OldPasswordSecret == nil {
-		return true
-	}
-	if cluster.Spec.PasswordSecret != nil && cluster.Status.OldPasswordSecret != nil {
-		if cluster.Status.OldPasswordSecret.Name != cluster.Spec.PasswordSecret.Name {
-			return true
+	if cluster.Spec.PasswordSecret != nil {
+		envSet := sts.Spec.Template.Spec.Containers[0].Env
+		for _, env := range envSet {
+			if env.Name == redisv1alpha1.PasswordENV && env.ValueFrom != nil {
+				if env.ValueFrom.SecretKeyRef.Name != cluster.Spec.PasswordSecret.Name {
+					return true
+				}
+			}
 		}
 	}
 

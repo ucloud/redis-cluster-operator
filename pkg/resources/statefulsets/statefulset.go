@@ -19,8 +19,6 @@ const (
 
 	graceTime = 30
 
-	passwordENV = "REDIS_PASSWORD"
-
 	configMapVolumeName = "conf"
 )
 
@@ -148,8 +146,8 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		"--cluster-config-file /data/nodes.conf",
 	}
 	if password != nil {
-		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", passwordENV),
-			fmt.Sprintf("--masterauth '$(%s)'", passwordENV))
+		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", redisv1alpha1.PasswordENV),
+			fmt.Sprintf("--masterauth '$(%s)'", redisv1alpha1.PasswordENV))
 	}
 	if len(cluster.Spec.Command) > 0 {
 		cmd = append(cmd, cluster.Spec.Command...)
@@ -344,7 +342,7 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVa
 	secretName := cluster.Spec.PasswordSecret.Name
 
 	return &corev1.EnvVar{
-		Name: passwordENV,
+		Name: redisv1alpha1.PasswordENV,
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{

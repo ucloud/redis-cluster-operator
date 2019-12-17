@@ -48,8 +48,20 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
-	if err := r.ensurer.EnsureRedisStatefulsets(cluster, backup, labels); err != nil {
-		return Kubernetes.Wrap(err, "EnsureRedisStatefulsets")
+	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, backup, labels); err != nil {
+		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
+		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
+	} else if updated {
+		waiter := &waitStatefulSetUpdating{
+			name:                  "waitStatefulSetUpdating",
+			timeout:               30 * time.Second * time.Duration(cluster.Spec.ClusterReplicas+2),
+			tick:                  5 * time.Second,
+			statefulSetController: r.statefulSetController,
+			cluster:               cluster,
+		}
+		if err := waiting(waiter, ctx.reqLogger); err != nil {
+			return err
+		}
 	}
 	if err := r.ensurer.EnsureRedisHeadLessSvcs(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvcs")

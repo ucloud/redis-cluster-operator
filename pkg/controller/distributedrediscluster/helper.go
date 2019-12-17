@@ -113,17 +113,17 @@ func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 }
 
 func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
-	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize) {
+	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---NumberOfMaster")
 		return true
 	}
 
-	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas) {
+	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MinReplicationFactor")
 		return true
 	}
 
-	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas) {
+	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MaxReplicationFactor")
 		return true
 	}
@@ -190,8 +190,42 @@ func (w *waitPodTerminating) Handler() error {
 	}
 	for _, pod := range podList.Items {
 		if pod.Status.Phase == corev1.PodRunning {
-			return fmt.Errorf("[%s] pod already runing", pod.Name)
+			return fmt.Errorf("[%s] pod still runing", pod.Name)
 		}
 	}
 	return nil
+}
+
+type waitStatefulSetUpdating struct {
+	name                  string
+	timeout               time.Duration
+	tick                  time.Duration
+	statefulSetController k8sutil.IStatefulSetControl
+	cluster               *redisv1alpha1.DistributedRedisCluster
+}
+
+func (w *waitStatefulSetUpdating) Name() string {
+	return w.name
+}
+
+func (w *waitStatefulSetUpdating) Tick() time.Duration {
+	return w.tick
+}
+
+func (w *waitStatefulSetUpdating) Timeout() time.Duration {
+	return w.timeout
+}
+
+func (w *waitStatefulSetUpdating) Handler() error {
+	labels := getLabels(w.cluster)
+	stsList, err := w.statefulSetController.ListStatefulSetByLabels(w.cluster.Namespace, labels)
+	if err != nil {
+		return err
+	}
+	for _, sts := range stsList.Items {
+		if sts.Status.ReadyReplicas != (w.cluster.Spec.ClusterReplicas + 1) {
+			return nil
+		}
+	}
+	return fmt.Errorf("statefulSet still not updated")
 }

@@ -106,9 +106,6 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod
 	}
 	status.MaxReplicationFactor = int32(maxReplicationFactor)
 	status.MinReplicationFactor = int32(minReplicationFactor)
-	if cluster.Spec.PasswordSecret != nil {
-		status.OldPasswordSecret = cluster.Spec.PasswordSecret
-	}
 
 	return status
 }
@@ -143,16 +140,6 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLog
 
 	if compareInts("restoreSucceeded", old.RestoreSucceeded, new.RestoreSucceeded, reqLogger) {
 		return true
-	}
-	if new.OldPasswordSecret != nil && old.OldPasswordSecret == nil {
-		reqLogger.V(4).Info("compare password, set", "passwordSecret", new.OldPasswordSecret.Name)
-		return true
-	}
-	if new.OldPasswordSecret != nil && old.OldPasswordSecret != nil {
-		if new.OldPasswordSecret.Name != old.OldPasswordSecret.Name {
-			reqLogger.V(4).Info("compare password, change", "newPasswordSecret", new.OldPasswordSecret.Name, "oldPasswordSecret", old.OldPasswordSecret.Name)
-			return true
-		}
 	}
 
 	for _, nodeA := range old.Nodes {

@@ -12,6 +12,7 @@ const (
 	LabelManagedByKey = "managed-by"
 	LabelNameKey      = "distributed-redis-cluster"
 	StatefulSetLabel  = "statefulSet"
+	PasswordENV       = "REDIS_PASSWORD"
 )
 
 // RedisRole RedisCluster Node Role type
