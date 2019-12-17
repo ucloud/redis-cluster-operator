@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
@@ -31,7 +32,9 @@ func SetClusterScaling(status *redisv1alpha1.DistributedRedisClusterStatus, reas
 	status.Reason = reason
 }
 
-func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod, oldStatus *redisv1alpha1.DistributedRedisClusterStatus) *redisv1alpha1.DistributedRedisClusterStatus {
+func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod,
+	cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) *redisv1alpha1.DistributedRedisClusterStatus {
+	oldStatus := cluster.Status
 	status := &redisv1alpha1.DistributedRedisClusterStatus{
 		Status:           oldStatus.Status,
 		Reason:           oldStatus.Reason,
@@ -57,7 +60,7 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod
 			return node.IP == pod.Status.PodIP
 		})
 		if err != nil {
-			log.Error(err, fmt.Sprintf("unable to retrieve the associated redis node with the pod: %s, ip:%s", pod.Name, pod.Status.PodIP))
+			reqLogger.Error(err, fmt.Sprintf("unable to retrieve the associated redis node with the pod: %s, ip:%s", pod.Name, pod.Status.PodIP))
 			continue
 		}
 		if len(redisNodes) == 1 {
@@ -103,38 +106,53 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod
 	}
 	status.MaxReplicationFactor = int32(maxReplicationFactor)
 	status.MinReplicationFactor = int32(minReplicationFactor)
+	if cluster.Spec.PasswordSecret != nil {
+		status.OldPasswordSecret = cluster.Spec.PasswordSecret
+	}
 
 	return status
 }
 
-func (r *ReconcileDistributedRedisCluster) updateClusterIfNeed(cluster *redisv1alpha1.DistributedRedisCluster, newStatus *redisv1alpha1.DistributedRedisClusterStatus) {
-	if compareStatus(&cluster.Status, newStatus) {
-		log.WithValues("namespace", cluster.Namespace, "name", cluster.Name).
+func (r *ReconcileDistributedRedisCluster) updateClusterIfNeed(cluster *redisv1alpha1.DistributedRedisCluster,
+	newStatus *redisv1alpha1.DistributedRedisClusterStatus,
+	reqLogger logr.Logger) {
+	if compareStatus(&cluster.Status, newStatus, reqLogger) {
+		reqLogger.WithValues("namespace", cluster.Namespace, "name", cluster.Name).
 			V(3).Info("status changed")
 		cluster.Status = *newStatus
 		r.crController.UpdateCRStatus(cluster)
 	}
 }
 
-func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus) bool {
-	if compareStringValue("ClusterStatus", string(old.Status), string(new.Status)) {
+func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLogger logr.Logger) bool {
+	if compareStringValue("ClusterStatus", string(old.Status), string(new.Status), reqLogger) {
 		return true
 	}
 
-	if compareStringValue("ClusterStatusReason", old.Reason, new.Reason) {
+	if compareStringValue("ClusterStatusReason", old.Reason, new.Reason, reqLogger) {
 		return true
 	}
 
-	if compareInts("NumberOfMaster", old.NumberOfMaster, new.NumberOfMaster) {
+	if compareInts("NumberOfMaster", old.NumberOfMaster, new.NumberOfMaster, reqLogger) {
 		return true
 	}
 
-	if compareInts("len(Nodes)", int32(len(old.Nodes)), int32(len(new.Nodes))) {
+	if compareInts("len(Nodes)", int32(len(old.Nodes)), int32(len(new.Nodes)), reqLogger) {
 		return true
 	}
 
-	if compareInts("restoreSucceeded", old.RestoreSucceeded, new.RestoreSucceeded) {
+	if compareInts("restoreSucceeded", old.RestoreSucceeded, new.RestoreSucceeded, reqLogger) {
 		return true
+	}
+	if new.OldPasswordSecret != nil && old.OldPasswordSecret == nil {
+		reqLogger.V(4).Info("compare password, set", "passwordSecret", new.OldPasswordSecret.Name)
+		return true
+	}
+	if new.OldPasswordSecret != nil && old.OldPasswordSecret != nil {
+		if new.OldPasswordSecret.Name != old.OldPasswordSecret.Name {
+			reqLogger.V(4).Info("compare password, change", "newPasswordSecret", new.OldPasswordSecret.Name, "oldPasswordSecret", old.OldPasswordSecret.Name)
+			return true
+		}
 	}
 
 	for _, nodeA := range old.Nodes {
@@ -142,7 +160,7 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus) bool {
 		for _, nodeB := range new.Nodes {
 			if nodeA.ID == nodeB.ID {
 				found = true
-				if compareNodes(&nodeA, &nodeB) {
+				if compareNodes(&nodeA, &nodeB, reqLogger) {
 					return true
 				}
 			}
@@ -155,20 +173,20 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus) bool {
 	return false
 }
 
-func compareNodes(nodeA, nodeB *redisv1alpha1.RedisClusterNode) bool {
-	if compareStringValue("Node.IP", nodeA.IP, nodeB.IP) {
+func compareNodes(nodeA, nodeB *redisv1alpha1.RedisClusterNode, reqLogger logr.Logger) bool {
+	if compareStringValue("Node.IP", nodeA.IP, nodeB.IP, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.MasterRef", nodeA.MasterRef, nodeB.MasterRef) {
+	if compareStringValue("Node.MasterRef", nodeA.MasterRef, nodeB.MasterRef, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.PodName", nodeA.PodName, nodeB.PodName) {
+	if compareStringValue("Node.PodName", nodeA.PodName, nodeB.PodName, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.Port", nodeA.Port, nodeB.Port) {
+	if compareStringValue("Node.Port", nodeA.Port, nodeB.Port, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.Role", string(nodeA.Role), string(nodeB.Role)) {
+	if compareStringValue("Node.Role", string(nodeA.Role), string(nodeB.Role), reqLogger) {
 		return true
 	}
 
@@ -181,43 +199,43 @@ func compareNodes(nodeA, nodeB *redisv1alpha1.RedisClusterNode) bool {
 		sizeSlotsB = len(nodeB.Slots)
 	}
 	if sizeSlotsA != sizeSlotsB {
-		log.V(4).Info(fmt.Sprintf("compare Node.Slote size: %d - %d", sizeSlotsA, sizeSlotsB))
+		reqLogger.V(4).Info(fmt.Sprintf("compare Node.Slote size: %d - %d", sizeSlotsA, sizeSlotsB))
 		return true
 	}
 
 	if (sizeSlotsA != 0) && !reflect.DeepEqual(nodeA.Slots, nodeB.Slots) {
-		log.V(4).Info(fmt.Sprintf("compare Node.Slote deepEqual: %v - %v", nodeA.Slots, nodeB.Slots))
+		reqLogger.V(4).Info(fmt.Sprintf("compare Node.Slote deepEqual: %v - %v", nodeA.Slots, nodeB.Slots))
 		return true
 	}
 
 	return false
 }
 
-func compareIntValue(name string, old, new *int32) bool {
+func compareIntValue(name string, old, new *int32, reqLogger logr.Logger) bool {
 	if old == nil && new == nil {
 		return true
 	} else if old == nil || new == nil {
 		return false
 	} else if *old != *new {
-		log.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, *old, *new))
+		reqLogger.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, *old, *new))
 		return true
 	}
 
 	return false
 }
 
-func compareInts(name string, old, new int32) bool {
+func compareInts(name string, old, new int32, reqLogger logr.Logger) bool {
 	if old != new {
-		log.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, old, new))
+		reqLogger.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, old, new))
 		return true
 	}
 
 	return false
 }
 
-func compareStringValue(name string, old, new string) bool {
+func compareStringValue(name string, old, new string, reqLogger logr.Logger) bool {
 	if old != new {
-		log.V(4).Info(fmt.Sprintf("compare %s: %s - %s", name, old, new))
+		reqLogger.V(4).Info(fmt.Sprintf("compare %s: %s - %s", name, old, new))
 		return true
 	}
 

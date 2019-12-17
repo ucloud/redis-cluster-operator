@@ -114,6 +114,8 @@ type DistributedRedisClusterStatus struct {
 	// The number of restore which reached phase Succeeded.
 	// +optional
 	RestoreSucceeded int32 `json:"restoreSucceeded,omitempty"`
+	// Store old password
+	OldPasswordSecret *corev1.LocalObjectReference `json:"oldPasswordSecret,omitempty"`
 }
 
 // RedisClusterNode represent a RedisCluster Node

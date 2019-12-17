@@ -177,7 +177,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		reqLogger.WithValues("err", err).Info("ensureCluster")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
@@ -204,7 +204,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		reqLogger.WithValues("err", err).Info("waitPodReady")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
@@ -245,7 +245,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		}
 		new := instance.Status.DeepCopy()
 		SetClusterFailed(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -266,12 +266,12 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, Redis.Wrap(err, "SetConfigIfNeed")
 	}
 
-	status := buildClusterStatus(clusterInfos, ctx.pods, &instance.Status)
+	status := buildClusterStatus(clusterInfos, ctx.pods, instance, reqLogger)
 	if is := r.isScalingDown(instance, reqLogger); is {
 		SetClusterRebalancing(status, "scaling down")
 	}
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
-	r.updateClusterIfNeed(instance, status)
+	r.updateClusterIfNeed(instance, status, reqLogger)
 
 	instance.Status = *status
 	if needClusterOperation(instance, reqLogger) {
@@ -280,7 +280,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		if err != nil {
 			new := instance.Status.DeepCopy()
 			SetClusterFailed(new, err.Error())
-			r.updateClusterIfNeed(instance, new)
+			r.updateClusterIfNeed(instance, new, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -291,9 +291,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}
-	newStatus := buildClusterStatus(newClusterInfos, ctx.pods, &instance.Status)
+	newStatus := buildClusterStatus(newClusterInfos, ctx.pods, instance, reqLogger)
 	SetClusterOK(newStatus, "OK")
-	r.updateClusterIfNeed(instance, newStatus)
+	r.updateClusterIfNeed(instance, newStatus, reqLogger)
 	return reconcile.Result{RequeueAfter: time.Duration(reconcileTime) * time.Second}, nil
 }
 

@@ -99,6 +99,15 @@ func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *apps
 	if cluster.Spec.Image != sts.Spec.Template.Spec.Containers[0].Image {
 		return true
 	}
+	if cluster.Spec.PasswordSecret != nil && cluster.Status.OldPasswordSecret == nil {
+		return true
+	}
+	if cluster.Spec.PasswordSecret != nil && cluster.Status.OldPasswordSecret != nil {
+		if cluster.Status.OldPasswordSecret.Name != cluster.Spec.PasswordSecret.Name {
+			return true
+		}
+	}
+
 	expectResource := cluster.Spec.Resources
 	currentResource := sts.Spec.Template.Spec.Containers[0].Resources
 	if result := expectResource.Requests.Memory().Cmp(*currentResource.Requests.Memory()); result != 0 {
