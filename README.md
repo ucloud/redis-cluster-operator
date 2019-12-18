@@ -1,4 +1,4 @@
-# redis-operator
+# redis-cluster-operator
 
 ## Overview
 
@@ -7,6 +7,9 @@ Redis Cluster Operator manages [Redis Cluster](https://redis.io/topics/cluster-s
 The operator itself is built with the [Operator framework](https://github.com/operator-framework/operator-sdk).
 
 ![Redis Cluster atop Kubernetes](/static/redis-cluster.png)
+
+Each master node and its slave nodes is managed by a statefulSet, create a headless svc for each statefulSet,
+and create a clusterIP service for all nodes.
 
 ## Prerequisites
 
@@ -76,37 +79,64 @@ NAME                              MASTERSIZE   STATUS    AGE
 example-distributedrediscluster   3            Scaling   11s
 
 $ kubectl get all -l redis.kun/name=example-distributedrediscluster
-NAME                                        READY   STATUS    RESTARTS   AGE
-pod/drc-example-distributedrediscluster-0   1/1     Running   0          4m5s
-pod/drc-example-distributedrediscluster-1   1/1     Running   0          3m31s
-pod/drc-example-distributedrediscluster-2   1/1     Running   0          2m54s
-pod/drc-example-distributedrediscluster-3   1/1     Running   0          2m20s
-pod/drc-example-distributedrediscluster-4   1/1     Running   0          103s
-pod/drc-example-distributedrediscluster-5   1/1     Running   0          62s
+NAME                                          READY   STATUS    RESTARTS   AGE
+pod/drc-example-distributedrediscluster-0-0   1/1     Running   0          2m48s
+pod/drc-example-distributedrediscluster-0-1   1/1     Running   0          2m8s
+pod/drc-example-distributedrediscluster-1-0   1/1     Running   0          2m48s
+pod/drc-example-distributedrediscluster-1-1   1/1     Running   0          2m13s
+pod/drc-example-distributedrediscluster-2-0   1/1     Running   0          2m48s
+pod/drc-example-distributedrediscluster-2-1   1/1     Running   0          2m15s
 
-NAME                                      TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)              AGE
-service/example-distributedrediscluster   ClusterIP   None         <none>        6379/TCP,16379/TCP   4m5s
+NAME                                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)              AGE
+service/example-distributedrediscluster     ClusterIP   172.17.132.71   <none>        6379/TCP,16379/TCP   2m48s
+service/example-distributedrediscluster-0   ClusterIP   None            <none>        6379/TCP,16379/TCP   2m48s
+service/example-distributedrediscluster-1   ClusterIP   None            <none>        6379/TCP,16379/TCP   2m48s
+service/example-distributedrediscluster-2   ClusterIP   None            <none>        6379/TCP,16379/TCP   2m48s
 
-NAME                                                   READY   AGE
-statefulset.apps/drc-example-distributedrediscluster   6/6     4m5s
+NAME                                                     READY   AGE
+statefulset.apps/drc-example-distributedrediscluster-0   2/2     2m48s
+statefulset.apps/drc-example-distributedrediscluster-1   2/2     2m48s
+statefulset.apps/drc-example-distributedrediscluster-2   2/2     2m48s
 
 $ kubectl get distributedrediscluster
 NAME                              MASTERSIZE   STATUS    AGE
 example-distributedrediscluster   3            Healthy   4m
 ```
 
-#### Scaling the Redis Cluster
+#### Scaling Up the Redis Cluster
 
-Increase the masterSize to trigger the scaling.
+Increase the masterSize to trigger the scaling up.
 
 ```
 apiVersion: redis.kun/v1alpha1
 kind: DistributedRedisCluster
 metadata:
+  annotations:
+    # if your operator run as cluster-scoped, add this annotations
+    redis.kun/scope: cluster-scoped
   name: example-distributedrediscluster
 spec:
   # Increase the masterSize to trigger the scaling.
   masterSize: 4
+  ClusterReplicas: 1
+  image: redis:5.0.4-alpine
+```
+
+#### Scaling Down the Redis Cluster
+
+Decrease the masterSize to trigger the scaling down.
+
+```
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  annotations:
+    # if your operator run as cluster-scoped, add this annotations
+    redis.kun/scope: cluster-scoped
+  name: example-distributedrediscluster
+spec:
+  # Increase the masterSize to trigger the scaling.
+  masterSize: 3
   ClusterReplicas: 1
   image: redis:5.0.4-alpine
 ```
@@ -147,7 +177,7 @@ $ kubectl create -f deploy/example/persistent.yaml
 $ kubectl create -f deploy/example/custom-config.yaml
 ```
 
-#### Custom Headless Service
+#### Custom Service
 
 ```
 $ kubectl create -f deploy/example/custom-service.yaml
