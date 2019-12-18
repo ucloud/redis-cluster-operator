@@ -28,7 +28,7 @@ type DistributedRedisClusterSpec struct {
 	Annotations     map[string]string            `json:"annotations,omitempty"`
 	Storage         *RedisStorage                `json:"storage,omitempty"`
 	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
-	PasswordSecret  *corev1.LocalObjectReference `json:"rootPasswordSecret,omitempty"`
+	PasswordSecret  *corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
 	Monitor         *AgentSpec                   `json:"monitor,omitempty"`
 	Init            *InitSpec                    `json:"init,omitempty"`
 }
