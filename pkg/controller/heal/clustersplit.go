@@ -47,7 +47,7 @@ func (c *CheckAndHeal) reassignClusters(admin redisutil.IAdmin, config *config.R
 			&redisutil.AdminOptions{
 				ConnectionTimeout:  time.Duration(config.DialTimeout) * time.Millisecond,
 				RenameCommandsFile: config.GetRenameCommandsFile(),
-			})
+			}, c.Logger)
 		for _, nodeAddr := range cluster {
 			if err := clusterAdmin.FlushAndReset(nodeAddr, redisutil.ResetHard); err != nil {
 				c.Logger.Error(err, "unable to flush the node", "node", nodeAddr)

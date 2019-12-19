@@ -8,9 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/mediocregopher/radix.v2/redis"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
@@ -21,8 +20,6 @@ const (
 	// ErrNotFound cannot find a node to connect to
 	ErrNotFound = "unable to find a node to connect"
 )
-
-var log = logf.Log.WithName("redis_util")
 
 // IAdminConnections interface representing the map of admin connections to redis cluster nodes
 type IAdminConnections interface {
@@ -71,6 +68,7 @@ type AdminConnections struct {
 	commandsMapping   map[string]string
 	clientName        string
 	password          string
+	log               logr.Logger
 }
 
 func init() {
@@ -90,7 +88,7 @@ func NewAdminConnections(addrs []string, options *AdminOptions) IAdminConnection
 			cnx.connectionTimeout = options.ConnectionTimeout
 		}
 		if _, err := os.Stat(options.RenameCommandsFile); err == nil {
-			cnx.commandsMapping = utils.BuildCommandReplaceMapping(options.RenameCommandsFile, log)
+			cnx.commandsMapping = utils.BuildCommandReplaceMapping(options.RenameCommandsFile, cnx.log)
 		}
 		cnx.clientName = options.ClientName
 		cnx.password = options.Password
@@ -102,7 +100,7 @@ func NewAdminConnections(addrs []string, options *AdminOptions) IAdminConnection
 // Reconnect force a reconnection on the given address
 // is the adress is not part of the map, act like Add
 func (cnx *AdminConnections) Reconnect(addr string) error {
-	log.Info(fmt.Sprintf("reconnecting to %s", addr))
+	cnx.log.Info(fmt.Sprintf("reconnecting to %s", addr))
 	cnx.Remove(addr)
 	return cnx.Add(addr)
 }
@@ -181,7 +179,7 @@ func (cnx *AdminConnections) Update(addr string) (IClient, error) {
 	if err == nil && c != nil {
 		cnx.clients[addr] = c
 	} else {
-		log.Info(fmt.Sprintf("cannot connect to %s ", addr))
+		cnx.log.Info(fmt.Sprintf("cannot connect to %s ", addr))
 	}
 	return c, err
 }
@@ -279,12 +277,12 @@ func (cnx *AdminConnections) connect(addr string) (IClient, error) {
 // in case of error, customize the error, log it and return it
 func (cnx *AdminConnections) ValidateResp(resp *redis.Resp, addr, errMessage string) error {
 	if resp == nil {
-		log.Error(fmt.Errorf("%s: unable to connect to node %s", errMessage, addr), "")
+		cnx.log.Error(fmt.Errorf("%s: unable to connect to node %s", errMessage, addr), "")
 		return fmt.Errorf("%s: unable to connect to node %s", errMessage, addr)
 	}
 	if resp.Err != nil {
 		cnx.handleError(addr, resp.Err)
-		log.Error(resp.Err, fmt.Sprintf("%s: unexpected error on node %s", errMessage, addr))
+		cnx.log.Error(resp.Err, fmt.Sprintf("%s: unexpected error on node %s", errMessage, addr))
 		return fmt.Errorf("%s: unexpected error on node %s: %v", errMessage, addr, resp.Err)
 	}
 	return nil
@@ -298,14 +296,14 @@ func (cnx *AdminConnections) ValidatePipeResp(client IClient, addr, errMessage s
 	for {
 		resp := client.PipeResp()
 		if resp == nil {
-			log.Error(fmt.Errorf("%s: unable to connect to node %s", errMessage, addr), "")
+			cnx.log.Error(fmt.Errorf("%s: unable to connect to node %s", errMessage, addr), "")
 			return false
 		}
 		if resp.Err != nil {
 			if resp.Err == redis.ErrPipelineEmpty {
 				break
 			}
-			log.Error(fmt.Errorf("%s: unexpected error on node %s: %v", errMessage, addr, resp.Err), "")
+			cnx.log.Error(fmt.Errorf("%s: unexpected error on node %s: %v", errMessage, addr, resp.Err), "")
 			if cnx.handleError(addr, resp.Err) {
 				// network error, no need to continue
 				return false

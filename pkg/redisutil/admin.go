@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 const (
@@ -42,10 +44,6 @@ type IAdmin interface {
 	SetConfigEpoch() error
 	// SetConfigIfNeed set redis config
 	SetConfigIfNeed(newConfig map[string]string) error
-	//// InitRedisCluster used to configure the first node of a cluster
-	//InitRedisCluster(addr string) error
-	//// GetClusterInfosSelected return the Nodes infos for all nodes selected in the cluster
-	//GetClusterInfosSelected(addrs []string) (*ClusterInfos, error)
 	// AttachNodeToCluster command use to connect a Node to the cluster
 	// the connection will be done on a random node part of the connection pool
 	AttachNodeToCluster(addr string) error
@@ -53,12 +51,8 @@ type IAdmin interface {
 	AttachSlaveToMaster(slave *Node, masterID string) error
 	// DetachSlave dettach a slave to its master
 	DetachSlave(slave *Node) error
-	//// StartFailover execute the failover of the Redis Master corresponding to the addr
-	//StartFailover(addr string) error
 	// ForgetNode execute the Redis command to force the cluster to forgot the the Node
 	ForgetNode(id string) error
-	//// ForgetNodeByAddr execute the Redis command to force the cluster to forgot the the Node
-	//ForgetNodeByAddr(id string) error
 	// SetSlots exec the redis command to set slots in a pipeline, provide
 	// and empty nodeID if the set slots commands doesn't take a nodeID in parameter
 	SetSlots(addr string, action string, slots []Slot, nodeID string) error
@@ -66,12 +60,6 @@ type IAdmin interface {
 	AddSlots(addr string, slots []Slot) error
 	// SetSlot use to set SETSLOT command on a slot
 	SetSlot(addr, action string, slot Slot, nodeID string) error
-	//// DelSlots exec the redis command to del slots in a pipeline
-	//DelSlots(addr string, slots []Slot) error
-	//// GetKeysInSlot exec the redis command to get the keys in the given slot on the node we are connected to
-	//GetKeysInSlot(addr string, slot Slot, batch int, limit bool) ([]string, error)
-	//// CountKeysInSlot exec the redis command to count the keys given slot on the node
-	//CountKeysInSlot(addr string, slot Slot) (int64, error)
 	// MigrateKeys from addr to destination node. returns number of slot migrated. If replace is true, replace key on busy error
 	MigrateKeys(addr string, dest *Node, slots []Slot, batch, timeout int, replace bool) (int, error)
 	// MigrateKeys use to migrate keys from slot to other slot. if replace is true, replace key on busy error
@@ -79,12 +67,8 @@ type IAdmin interface {
 	MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int, timeout int, replace bool) (int, error)
 	// FlushAndReset reset the cluster configuration of the node, the node is flushed in the same pipe to ensure reset works
 	FlushAndReset(addr string, mode string) error
-	//// FlushAll flush all keys in cluster
-	//FlushAll()
 	// GetHashMaxSlot get the max slot value
 	GetHashMaxSlot() Slot
-	////RebuildConnectionMap rebuild the connection map according to the given addresses
-	//RebuildConnectionMap(addrs []string, options *AdminOptions)
 }
 
 // AdminOptions optional options for redis admin
@@ -99,13 +83,15 @@ type AdminOptions struct {
 type Admin struct {
 	hashMaxSlots Slot
 	cnx          IAdminConnections
+	log          logr.Logger
 }
 
 // NewAdmin returns new AdminInterface instance
 // at the same time it connects to all Redis Nodes thanks to the addrs list
-func NewAdmin(addrs []string, options *AdminOptions) IAdmin {
+func NewAdmin(addrs []string, options *AdminOptions, log logr.Logger) IAdmin {
 	a := &Admin{
 		hashMaxSlots: DefaultHashMaxSlots,
+		log:          log.WithName("redis_util"),
 	}
 
 	// perform initial connections
@@ -132,7 +118,7 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 	for addr, c := range a.Connections().GetAll() {
 		nodeinfos, err := a.getInfos(c, addr)
 		if err != nil {
-			log.WithValues("err", err).Info("get redis info failed")
+			a.log.WithValues("err", err).Info("get redis info failed")
 			infos.Status = ClusterInfosPartial
 			clusterErr.partial = true
 			clusterErr.errs[addr] = err
@@ -141,12 +127,12 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 		if nodeinfos.Node != nil && nodeinfos.Node.IPPort() == addr {
 			infos.Infos[addr] = nodeinfos
 		} else {
-			log.Info("bad node info retrieved from", "addr", addr)
+			a.log.Info("bad node info retrieved from", "addr", addr)
 		}
 	}
 
 	if len(clusterErr.errs) == 0 {
-		clusterErr.inconsistent = !infos.ComputeStatus()
+		clusterErr.inconsistent = !infos.ComputeStatus(a.log)
 	}
 	if infos.Status == ClusterInfosConsistent {
 		return infos, nil
@@ -168,28 +154,7 @@ func (a *Admin) getInfos(c IClient, addr string) (*NodeInfos, error) {
 		return nil, fmt.Errorf("wrong format from CLUSTER NODES: %v", err)
 	}
 
-	nodeInfos := DecodeNodeInfos(&raw, addr)
-
-	//if log.V(3) {
-	//	//Retrieve server info for debugging
-	//	resp = c.Cmd("INFO", "SERVER")
-	//	if err = a.Connections().ValidateResp(resp, addr, "unable to retrieve Node Info"); err != nil {
-	//		return nil, err
-	//	}
-	//	raw, err = resp.Str()
-	//	if err != nil {
-	//		return nil, fmt.Errorf("wrong format from INFO SERVER: %v", err)
-	//	}
-	//
-	//	var serverStartTime time.Time
-	//	serverStartTime, err = DecodeNodeStartTime(&raw)
-	//
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	//	nodeInfos.Node.ServerStartTime = serverStartTime
-	//}
+	nodeInfos := DecodeNodeInfos(&raw, addr, a.log)
 
 	return nodeInfos, nil
 }
@@ -333,7 +298,7 @@ func (a *Admin) AttachNodeToCluster(addr string) error {
 		if cAddr == addr {
 			continue
 		}
-		log.V(3).Info("CLUSTER MEET", "from addr", cAddr, "to", addr)
+		a.log.V(3).Info("CLUSTER MEET", "from addr", cAddr, "to", addr)
 		resp := c.Cmd("CLUSTER", "MEET", ip, port)
 		if err = a.Connections().ValidateResp(resp, addr, "cannot attach node to cluster"); err != nil {
 			return err
@@ -342,7 +307,7 @@ func (a *Admin) AttachNodeToCluster(addr string) error {
 
 	a.Connections().Add(addr)
 
-	log.Info(fmt.Sprintf("node %s attached properly", addr))
+	a.log.Info(fmt.Sprintf("node %s attached properly", addr))
 	return nil
 }
 
@@ -373,7 +338,7 @@ func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 
 		for key, value := range newConfig {
 			if value != oldConfig[key] {
-				log.V(3).Info("CONFIG SET", key, value)
+				a.log.V(3).Info("CONFIG SET", key, value)
 				resp := c.Cmd("CONFIG", "SET", key, value)
 				if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve config"); err != nil {
 					return err
@@ -411,7 +376,7 @@ func (a *Admin) MigrateKeys(addr string, dest *Node, slots []Slot, batch int, ti
 			}
 			keys, err := resp.List()
 			if err != nil {
-				log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
+				a.log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
 				return keyCount, err
 			}
 
@@ -455,7 +420,7 @@ func (a *Admin) MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int,
 		}
 		keys, err := resp.List()
 		if err != nil {
-			log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
+			a.log.Error(err, "wrong returned format for CLUSTER GETKEYSINSLOT")
 			return keyCount, err
 		}
 
@@ -490,23 +455,23 @@ func (a *Admin) ForgetNode(id string) error {
 
 		if IsSlave(nodeinfos.Node) && nodeinfos.Node.MasterReferent == id {
 			if err := a.DetachSlave(nodeinfos.Node); err != nil {
-				log.Error(err, "DetachSlave", "node", nodeAddr)
+				a.log.Error(err, "DetachSlave", "node", nodeAddr)
 			}
-			log.Info(fmt.Sprintf("detach slave id: %s of master: %s", nodeinfos.Node.ID, id))
+			a.log.Info(fmt.Sprintf("detach slave id: %s of master: %s", nodeinfos.Node.ID, id))
 		}
 
 		c, err := a.Connections().Get(nodeAddr)
 		if err != nil {
-			log.Error(err, fmt.Sprintf("cannot force a forget on node %s, for node %s", nodeAddr, id))
+			a.log.Error(err, fmt.Sprintf("cannot force a forget on node %s, for node %s", nodeAddr, id))
 			continue
 		}
 
-		log.Info("CLUSTER FORGET", "id", id, "from", nodeAddr)
+		a.log.Info("CLUSTER FORGET", "id", id, "from", nodeAddr)
 		resp := c.Cmd("CLUSTER", "FORGET", id)
 		a.Connections().ValidateResp(resp, nodeAddr, "Unable to execute FORGET command")
 	}
 
-	log.Info("Forget node done", "node", id)
+	a.log.Info("Forget node done", "node", id)
 	return nil
 }
 
@@ -514,7 +479,7 @@ func (a *Admin) ForgetNode(id string) error {
 func (a *Admin) DetachSlave(slave *Node) error {
 	c, err := a.Connections().Get(slave.IPPort())
 	if err != nil {
-		log.Error(err, fmt.Sprintf("unable to get the connection for slave ID:%s, addr:%s", slave.ID, slave.IPPort()))
+		a.log.Error(err, fmt.Sprintf("unable to get the connection for slave ID:%s, addr:%s", slave.ID, slave.IPPort()))
 		return err
 	}
 
@@ -524,7 +489,7 @@ func (a *Admin) DetachSlave(slave *Node) error {
 	}
 
 	if err = a.AttachNodeToCluster(slave.IPPort()); err != nil {
-		log.Error(err, fmt.Sprintf("[DetachSlave] unable to AttachNodeToCluster the Slave id: %s addr:%s", slave.ID, slave.IPPort()))
+		a.log.Error(err, fmt.Sprintf("[DetachSlave] unable to AttachNodeToCluster the Slave id: %s addr:%s", slave.ID, slave.IPPort()))
 		return err
 	}
 

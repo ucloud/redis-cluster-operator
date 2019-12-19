@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 const (
@@ -52,7 +54,7 @@ func NewClusterInfos() *ClusterInfos {
 }
 
 // DecodeNodeStartTime decode from the cmd output the Redis instance info. Second argument is the node on which we are connected to request info
-func DecodeNodeStartTime(input *string) (time.Time, error) {
+func DecodeNodeStartTime(input *string, log logr.Logger) (time.Time, error) {
 	lines := strings.Split(*input, "\n")
 	for _, line := range lines {
 		values := strings.Split(line, ":")
@@ -70,7 +72,7 @@ func DecodeNodeStartTime(input *string) (time.Time, error) {
 }
 
 // DecodeNodeInfos decode from the cmd output the Redis nodes info. Second argument is the node on which we are connected to request info
-func DecodeNodeInfos(input *string, addr string) *NodeInfos {
+func DecodeNodeInfos(input *string, addr string, log logr.Logger) *NodeInfos {
 	infos := NewNodeInfos()
 	lines := strings.Split(*input, "\n")
 	for _, line := range lines {
@@ -138,7 +140,7 @@ func DecodeNodeInfos(input *string, addr string) *NodeInfos {
 // the status ClusterInfosPartial is set while building the clusterinfos
 // if already set, do nothing
 // returns true if contistent or if another error
-func (c *ClusterInfos) ComputeStatus() bool {
+func (c *ClusterInfos) ComputeStatus(log logr.Logger) bool {
 	if c.Status != ClusterInfosUnset {
 		return false
 	}

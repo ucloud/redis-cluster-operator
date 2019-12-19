@@ -71,7 +71,7 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis, reqLo
 		Password:           password,
 	}
 
-	return redisutil.NewAdmin(nodesAddrs, &adminConfig), nil
+	return redisutil.NewAdmin(nodesAddrs, &adminConfig, reqLogger), nil
 }
 
 func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.DistributedRedisCluster) (*redisutil.Cluster, redisutil.Nodes, error) {
