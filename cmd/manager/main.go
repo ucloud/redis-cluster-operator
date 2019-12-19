@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/ucloud/redis-cluster-operator/pkg/apis"
+	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	config2 "github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/distributedrediscluster"
@@ -151,6 +152,17 @@ func main() {
 		// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
 		if err == metrics.ErrServiceMonitorNotPresent {
 			log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
+		}
+	}
+
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		log.Info("Starting the WebHook.")
+		ws := mgr.GetWebhookServer()
+		ws.CertDir = "/etc/webhook/certs"
+		ws.Port = 7443
+		if err = (&redisv1alpha1.DistributedRedisCluster{}).SetupWebhookWithManager(mgr); err != nil {
+			log.Error(err, "unable to create webHook", "webHook", "DistributedRedisCluster")
+			os.Exit(1)
 		}
 	}
 

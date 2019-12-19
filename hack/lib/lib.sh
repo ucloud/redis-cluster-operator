@@ -148,20 +148,6 @@ hub_canary() {
   fi
 }
 
-attic_pull() {
-  local cmd="docker pull docker.appscode.com/$IMG:$TAG"
-  echo $cmd; $cmd
-  cmd="docker tag docker.appscode.com/$IMG:$TAG $DOCKER_REGISTRY/$IMG:$TAG"
-  echo $cmd; $cmd
-}
-
-gcr_pull() {
-  local cmd="gcloud docker -- pull gcr.io/$GCR_PROJECT/$IMG:$TAG"
-  echo $cmd; $cmd
-  cmd="docker tag gcr.io/$GCR_PROJECT/$IMG:$TAG $DOCKER_REGISTRY/$IMG:$TAG"
-  echo $cmd; $cmd
-}
-
 docker_release() {
   hub_up
 }
