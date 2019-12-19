@@ -155,7 +155,7 @@ func main() {
 		}
 	}
 
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if os.Getenv("ENABLE_WEBHOOKS") == "true" {
 		log.Info("Starting the WebHook.")
 		ws := mgr.GetWebhookServer()
 		ws.CertDir = "/etc/webhook/certs"
