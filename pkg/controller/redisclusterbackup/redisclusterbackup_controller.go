@@ -36,7 +36,7 @@ const backupFinalizer = "finalizer.backup.redis.kun"
 
 func init() {
 	controllerFlagSet = pflag.NewFlagSet("controller", pflag.ExitOnError)
-	controllerFlagSet.IntVar(&maxConcurrentReconciles, "ctr-maxconcurrent", 1, "the maximum number of concurrent Reconciles which can be run. Defaults to 1.")
+	controllerFlagSet.IntVar(&maxConcurrentReconciles, "backupctr-maxconcurrent", 2, "the maximum number of concurrent Reconciles which can be run. Defaults to 1.")
 }
 
 func FlagSet() *pflag.FlagSet {
@@ -114,7 +114,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	jobPred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Call Job UpdateFunc")
 			if !utils.ShoudManage(e.MetaNew) {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Job UpdateFunc Not Manage")
 				return false
 			}
 			oldObj := e.ObjectOld.(*batch.Job)
@@ -139,7 +141,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Call Job CreateFunc")
 			if !utils.ShoudManage(e.Meta) {
+				log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Job CreateFunc Not Manage")
 				return false
 			}
 			job := e.Object.(*batch.Job)
@@ -281,10 +285,14 @@ func remove(list []string, s string) []string {
 }
 
 func isJobCompleted(old, new *batch.Job) bool {
+	log.WithValues("Request.Namespace", new.Namespace).V(4).Info("isJobCompleted", "old.Succeeded", old.Status.Succeeded,
+		"new.Succeeded", new.Status.Succeeded, "old.Failed", old.Status.Failed, "new.Failed", new.Status.Failed)
 	if old.Status.Succeeded == 0 && new.Status.Succeeded > 0 {
+		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Succeeded", "job", new.Name)
 		return true
 	}
 	if old.Status.Failed < utils.Int32(old.Spec.BackoffLimit) && new.Status.Failed >= utils.Int32(new.Spec.BackoffLimit) {
+		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Failed", "job", new.Name)
 		return true
 	}
 	return false
