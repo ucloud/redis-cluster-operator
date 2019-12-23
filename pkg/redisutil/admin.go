@@ -95,7 +95,7 @@ func NewAdmin(addrs []string, options *AdminOptions, log logr.Logger) IAdmin {
 	}
 
 	// perform initial connections
-	a.cnx = NewAdminConnections(addrs, options)
+	a.cnx = NewAdminConnections(addrs, options, log)
 
 	return a
 }

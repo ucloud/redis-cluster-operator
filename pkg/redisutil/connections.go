@@ -76,12 +76,13 @@ func init() {
 }
 
 // NewAdminConnections returns and instance of AdminConnectionsInterface
-func NewAdminConnections(addrs []string, options *AdminOptions) IAdminConnections {
+func NewAdminConnections(addrs []string, options *AdminOptions, log logr.Logger) IAdminConnections {
 	cnx := &AdminConnections{
 		clients:           make(map[string]IClient),
 		connectionTimeout: defaultClientTimeout,
 		commandsMapping:   make(map[string]string),
 		clientName:        defaultClientName,
+		log:               log,
 	}
 	if options != nil {
 		if options.ConnectionTimeout != 0 {
