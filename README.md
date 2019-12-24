@@ -10,7 +10,7 @@ The operator itself is built with the [Operator framework](https://github.com/op
 
 ## Prerequisites
 
-* go version v1.12+.
+* go version v1.13+.
 * Access to a Kubernetes v1.13.3 cluster.
 
 ## Features
