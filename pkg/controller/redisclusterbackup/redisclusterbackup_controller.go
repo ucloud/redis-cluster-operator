@@ -207,35 +207,35 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Check if the RedisClusterBackup instance is marked to be deleted, which is
-	// indicated by the deletion timestamp being set.
-	isBackupMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
-	if isBackupMarkedToBeDeleted {
-		if contains(instance.GetFinalizers(), backupFinalizer) {
-			// Run finalization logic for backupFinalizer. If the
-			// finalization logic fails, don't remove the finalizer so
-			// that we can retry during the next reconciliation.
-			if err := r.finalizeBackup(reqLogger, instance); err != nil {
-				return reconcile.Result{}, err
-			}
+	//// Check if the RedisClusterBackup instance is marked to be deleted, which is
+	//// indicated by the deletion timestamp being set.
+	//isBackupMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
+	//if isBackupMarkedToBeDeleted {
+	//	if contains(instance.GetFinalizers(), backupFinalizer) {
+	//		// Run finalization logic for backupFinalizer. If the
+	//		// finalization logic fails, don't remove the finalizer so
+	//		// that we can retry during the next reconciliation.
+	//		if err := r.finalizeBackup(reqLogger, instance); err != nil {
+	//			return reconcile.Result{}, err
+	//		}
+	//
+	//		// Remove backupFinalizer. Once all finalizers have been
+	//		// removed, the object will be deleted.
+	//		instance.SetFinalizers(remove(instance.GetFinalizers(), backupFinalizer))
+	//		err := r.client.Update(context.TODO(), instance)
+	//		if err != nil {
+	//			return reconcile.Result{}, err
+	//		}
+	//	}
+	//	return reconcile.Result{}, nil
+	//}
 
-			// Remove backupFinalizer. Once all finalizers have been
-			// removed, the object will be deleted.
-			instance.SetFinalizers(remove(instance.GetFinalizers(), backupFinalizer))
-			err := r.client.Update(context.TODO(), instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-		return reconcile.Result{}, nil
-	}
-
-	// Add finalizer for this CR
-	if !contains(instance.GetFinalizers(), backupFinalizer) {
-		if err := r.addFinalizer(reqLogger, instance); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	//// Add finalizer for this CR
+	//if !contains(instance.GetFinalizers(), backupFinalizer) {
+	//	if err := r.addFinalizer(reqLogger, instance); err != nil {
+	//		return reconcile.Result{}, err
+	//	}
+	//}
 
 	if err := r.create(reqLogger, instance); err != nil {
 		return reconcile.Result{}, err
