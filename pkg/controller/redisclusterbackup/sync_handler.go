@@ -233,6 +233,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 		return nil, err
 	}
 
+	isController := true
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -244,6 +245,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 					Kind:       redisv1alpha1.RedisClusterBackupKind,
 					Name:       backup.Name,
 					UID:        backup.UID,
+					Controller: &isController,
 				},
 			},
 		},
