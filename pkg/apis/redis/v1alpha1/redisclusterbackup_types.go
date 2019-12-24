@@ -20,7 +20,7 @@ type RedisClusterBackupSpec struct {
 	RedisClusterName string        `json:"redisClusterName"`
 	Storage          *RedisStorage `json:"storage,omitempty"`
 	store.Backend    `json:",inline"`
-	PodSpec          PodSpec `json:"podSpec,omitempty"`
+	PodSpec          *PodSpec `json:"podSpec,omitempty"`
 }
 
 type PodSpec struct {
