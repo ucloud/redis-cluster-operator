@@ -1,4 +1,4 @@
-FROM golang:1.12.9-alpine3.9 as go-builder
+FROM golang:1.13.3-alpine as go-builder
 
 RUN apk update && apk upgrade && \
     apk add --no-cache ca-certificates git mercurial
