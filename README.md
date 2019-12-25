@@ -13,8 +13,8 @@ and create a clusterIP service for all nodes.
 
 ## Prerequisites
 
-* go version v1.12+.
-* Access to a Kubernetes v1.13.3 cluster.
+* go version v1.13+.
+* Access to a Kubernetes v1.13.10 cluster.
 
 ## Features
 
