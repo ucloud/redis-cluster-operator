@@ -78,4 +78,3 @@ tags
 .idea/*
 vendor/*
 main
-go.sum
