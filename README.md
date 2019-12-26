@@ -143,6 +143,8 @@ spec:
 
 #### Backup and Restore
 
+**Only Ceph  object storage is supported now**
+
 Backup
 ```
 $ kubectl create -f deploy/example/backup-restore/redisclusterbackup_cr.yaml
