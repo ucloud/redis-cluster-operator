@@ -299,10 +299,6 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *
 				},
 			},
 		},
-		Resources:      backup.Spec.PodSpec.Resources,
-		LivenessProbe:  backup.Spec.PodSpec.LivenessProbe,
-		ReadinessProbe: backup.Spec.PodSpec.ReadinessProbe,
-		Lifecycle:      backup.Spec.PodSpec.Lifecycle,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      redisStorageVolumeName,
@@ -317,6 +313,12 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *
 	}
 	if password != nil {
 		container.Env = append(container.Env, *password)
+	}
+	if backup.Spec.PodSpec != nil {
+		container.Resources = backup.Spec.PodSpec.Resources
+		container.LivenessProbe = backup.Spec.PodSpec.LivenessProbe
+		container.ReadinessProbe = backup.Spec.PodSpec.ReadinessProbe
+		container.Lifecycle = backup.Spec.PodSpec.Lifecycle
 	}
 	return container, nil
 }
