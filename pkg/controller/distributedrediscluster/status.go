@@ -36,9 +36,9 @@ func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod
 	cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) *redisv1alpha1.DistributedRedisClusterStatus {
 	oldStatus := cluster.Status
 	status := &redisv1alpha1.DistributedRedisClusterStatus{
-		Status:           oldStatus.Status,
-		Reason:           oldStatus.Reason,
-		RestoreSucceeded: oldStatus.RestoreSucceeded,
+		Status:  oldStatus.Status,
+		Reason:  oldStatus.Reason,
+		Restore: oldStatus.Restore,
 	}
 
 	nbMaster := int32(0)
@@ -138,7 +138,7 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLog
 		return true
 	}
 
-	if compareInts("restoreSucceeded", old.RestoreSucceeded, new.RestoreSucceeded, reqLogger) {
+	if compareInts("restoreSucceeded", old.Restore.RestoreSucceeded, new.Restore.RestoreSucceeded, reqLogger) {
 		return true
 	}
 

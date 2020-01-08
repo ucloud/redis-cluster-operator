@@ -37,18 +37,10 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 		return StopRetry.Wrap(err, "stop retry")
 	}
 	labels := getLabels(cluster)
-	var backup *redisv1alpha1.RedisClusterBackup
-	var err error
-	if cluster.Spec.Init != nil {
-		backup, err = r.crController.GetRedisClusterBackup(cluster.Spec.Init.BackupSource.Namespace, cluster.Spec.Init.BackupSource.Name)
-		if err != nil {
-			return err
-		}
-	}
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
-	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, backup, labels); err != nil {
+	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, labels); err != nil {
 		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
 	} else if updated {
@@ -69,7 +61,7 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisSvc(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisSvc")
 	}
-	if err := r.ensurer.EnsureRedisOSMSecret(cluster, backup, labels); err != nil {
+	if err := r.ensurer.EnsureRedisOSMSecret(cluster, labels); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
 		}
@@ -90,27 +82,26 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error 
 }
 
 func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
-	initSpec := cluster.Spec.Init
-	if initSpec != nil {
-		if initSpec.BackupSource == nil {
-			return fmt.Errorf("backupSource is required")
+	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
+		if cluster.Status.Restore.Backup == nil {
+			initSpec := cluster.Spec.Init
+			backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
+			if err != nil {
+				reqLogger.Error(err, "GetRedisClusterBackup")
+				return err
+			}
+			if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
+				return fmt.Errorf("backup is still running")
+			}
+			cluster.Status.Restore.Backup = backup
 		}
-		backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
-		if err != nil {
-			return err
-		}
-		if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
-			return fmt.Errorf("backup is still running")
-		}
+
+		backup := cluster.Status.Restore.Backup
 		if cluster.Spec.Image == "" {
 			cluster.Spec.Image = backup.Status.ClusterImage
 		}
 		cluster.Spec.MasterSize = backup.Status.MasterSize
-		if cluster.Status.RestoreSucceeded <= 0 {
-			cluster.Spec.ClusterReplicas = 0
-		} else {
-			cluster.Spec.ClusterReplicas = backup.Status.ClusterReplicas
-		}
+		cluster.Spec.ClusterReplicas = 0
 	}
 	cluster.Validate(reqLogger)
 	return nil

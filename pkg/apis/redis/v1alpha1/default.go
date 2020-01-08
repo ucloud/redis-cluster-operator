@@ -3,16 +3,12 @@ package v1alpha1
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 
 	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/ucloud/redis-cluster-operator/pkg/config"
-	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
@@ -42,19 +38,6 @@ func (in *DistributedRedisCluster) Validate(log logr.Logger) {
 		in.Spec.Resources = defaultResource()
 	}
 
-	renameCmdMap := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
-	renameCmdSlice := make([]string, len(renameCmdMap))
-	i := 0
-	for key, value := range renameCmdMap {
-		cmd := fmt.Sprintf("--rename-command %s %s", key, value)
-		renameCmdSlice[i] = cmd
-		i++
-	}
-	sort.Strings(renameCmdSlice)
-	for _, cmd := range renameCmdSlice {
-		in.Spec.Command = append(in.Spec.Command, cmd)
-	}
-
 	mon := in.Spec.Monitor
 	if mon != nil {
 		if mon.Prometheus == nil {
@@ -71,6 +54,18 @@ func (in *DistributedRedisCluster) Validate(log logr.Logger) {
 		in.Spec.Annotations["prometheus.io/path"] = PrometheusExporterTelemetryPath
 		in.Spec.Annotations["prometheus.io/port"] = fmt.Sprintf("%d", mon.Prometheus.Port)
 	}
+}
+
+func (in *DistributedRedisCluster) IsRestoreFromBackup() bool {
+	initSpec := in.Spec.Init
+	if initSpec != nil && initSpec.BackupSource != nil {
+		return true
+	}
+	return false
+}
+
+func (in *DistributedRedisCluster) IsRestored() bool {
+	return in.Status.Restore.RestoreSucceeded > 0
 }
 
 func defaultResource() *v1.ResourceRequirements {

@@ -72,7 +72,7 @@ func NewConfigMapForRestore(cluster *redisv1alpha1.DistributedRedisCluster, labe
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Data: map[string]string{
-			RestoreSucceeded: fmt.Sprintf("%d", cluster.Status.RestoreSucceeded),
+			RestoreSucceeded: fmt.Sprintf("%d", cluster.Status.Restore.RestoreSucceeded),
 		},
 	}
 }

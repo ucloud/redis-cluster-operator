@@ -120,7 +120,9 @@ case "$op" in
     fi
     index=$(echo "${POD_NAME}" | awk -F- '{print $(NF-1)}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
-    osm --config "$OSM_CONFIG_FILE" sync ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR" -v
+    SOURCE_SNAPSHOT="$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT"
+    echo "From $SOURCE_SNAPSHOT"
+    osm --config "$OSM_CONFIG_FILE" sync ceph:"$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
 
     echo "Recovery successful"
     ;;

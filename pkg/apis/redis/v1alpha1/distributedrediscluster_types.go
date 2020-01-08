@@ -111,9 +111,15 @@ type DistributedRedisClusterStatus struct {
 	MaxReplicationFactor int32              `json:"maxReplicationFactor,omitempty"`
 	NodesPlacement       NodesPlacementInfo `json:"nodesPlacementInfo,omitempty"`
 	Nodes                []RedisClusterNode `json:"nodes"`
-	// The number of restore which reached phase Succeeded.
 	// +optional
-	RestoreSucceeded int32 `json:"restoreSucceeded,omitempty"`
+	Restore Restore `json:"restore"`
+}
+
+type Restore struct {
+	// The number of restore which reached phase Succeeded.
+	RestoreSucceeded int32               `json:"restoreSucceeded,omitempty"`
+	Backup           *RedisClusterBackup `json:"backup, omitempty"`
+	//BackupSourceSpec `json:",inline"`
 }
 
 // RedisClusterNode represent a RedisCluster Node

@@ -250,12 +250,13 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 	}
 
 	// update cr and wait for the next Reconcile loop
-	if instance.Spec.Init != nil && instance.Status.RestoreSucceeded <= 0 {
+	if instance.IsRestoreFromBackup() && !instance.IsRestored() {
 		reqLogger.Info("update restore redis cluster cr")
-		instance.Status.RestoreSucceeded = 1
+		instance.Status.Restore.RestoreSucceeded = 1
 		if err := r.crController.UpdateCRStatus(instance); err != nil {
 			return reconcile.Result{}, err
 		}
+		instance.Spec.ClusterReplicas = instance.Status.Restore.Backup.Status.ClusterReplicas
 		if err := r.crController.UpdateCR(instance); err != nil {
 			return reconcile.Result{}, err
 		}

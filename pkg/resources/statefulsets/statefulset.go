@@ -2,15 +2,22 @@ package statefulsets
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/osm"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/configmaps"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
+
+var log = logf.Log.WithName("resource_statefulset")
 
 const (
 	redisStorageVolumeName = "redis-data"
@@ -24,9 +31,9 @@ const (
 
 // NewStatefulSetForCR creates a new StatefulSet for the given Cluster.
 func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
-	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) (*appsv1.StatefulSet, error) {
+	labels map[string]string) (*appsv1.StatefulSet, error) {
 	password := redisPassword(cluster)
-	volumes := redisVolumes(cluster, backup)
+	volumes := redisVolumes(cluster)
 	namespace := cluster.Namespace
 	spec := cluster.Spec
 	size := spec.ClusterReplicas + 1
@@ -77,8 +84,8 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 	if spec.Monitor != nil {
 		ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, redisExporterContainer(cluster, password))
 	}
-	if spec.Init != nil {
-		initContainer, err := redisInitContainer(cluster, backup, password)
+	if cluster.IsRestoreFromBackup() && cluster.Status.Restore.Backup != nil {
+		initContainer, err := redisInitContainer(cluster, password)
 		if err != nil {
 			return nil, err
 		}
@@ -149,11 +156,43 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", redisv1alpha1.PasswordENV),
 			fmt.Sprintf("--masterauth '$(%s)'", redisv1alpha1.PasswordENV))
 	}
-	if len(cluster.Spec.Command) > 0 {
-		cmd = append(cmd, cluster.Spec.Command...)
+
+	renameCmdMap := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
+	mergedCmd := mergeRenameCmds(cluster.Spec.Command, renameCmdMap)
+
+	if len(mergedCmd) > 0 {
+		cmd = append(cmd, mergedCmd...)
 	}
 
 	return cmd
+}
+
+func mergeRenameCmds(userCmds []string, systemRenameCmdMap map[string]string) []string {
+	cmds := make([]string, 0)
+	for _, cmd := range userCmds {
+		splitedCmd := strings.Fields(cmd)
+		if len(splitedCmd) == 3 && strings.ToLower(splitedCmd[0]) == "--rename-command" {
+			if _, ok := systemRenameCmdMap[splitedCmd[1]]; !ok {
+				cmds = append(cmds, cmd)
+			}
+		} else {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	renameCmdSlice := make([]string, len(systemRenameCmdMap))
+	i := 0
+	for key, value := range systemRenameCmdMap {
+		c := fmt.Sprintf("--rename-command %s %s", key, value)
+		renameCmdSlice[i] = c
+		i++
+	}
+	sort.Strings(renameCmdSlice)
+	for _, renameCmd := range renameCmdSlice {
+		cmds = append(cmds, renameCmd)
+	}
+
+	return cmds
 }
 
 func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
@@ -256,7 +295,8 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 	return container
 }
 
-func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup, password *corev1.EnvVar) (corev1.Container, error) {
+func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) (corev1.Container, error) {
+	backup := cluster.Status.Restore.Backup
 	backupSpec := backup.Spec.Backend
 	bucket, err := backupSpec.Container()
 	if err != nil {
@@ -266,6 +306,7 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, backup *
 	if err != nil {
 		return corev1.Container{}, err
 	}
+	log.V(3).Info("restore", "namespaces", cluster.Namespace, "name", cluster.Name, "folderName", folderName)
 	container := corev1.Container{
 		Name:            redisv1alpha1.JobTypeRestore,
 		Image:           backup.Spec.Image,
@@ -356,7 +397,7 @@ func redisPassword(cluster *redisv1alpha1.DistributedRedisCluster) *corev1.EnvVa
 	}
 }
 
-func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv1alpha1.RedisClusterBackup) []corev1.Volume {
+func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volume {
 	executeMode := int32(0755)
 	volumes := []corev1.Volume{
 		{
@@ -376,16 +417,17 @@ func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster, backup *redisv
 	if dataVolume != nil {
 		volumes = append(volumes, *dataVolume)
 	}
-	if cluster.Spec.Init != nil {
+	if cluster.IsRestoreFromBackup() && cluster.Status.Restore.Backup != nil {
 		volumes = append(volumes, corev1.Volume{
 			Name: "osmconfig",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: backup.OSMSecretName(),
+					SecretName: cluster.Status.Restore.Backup.OSMSecretName(),
 				},
 			},
 		})
 	}
+
 	return volumes
 }
 
