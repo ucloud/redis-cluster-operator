@@ -228,7 +228,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 		return nil, err
 	}
 
-	containers, err := r.backupContainers(backup, cluster)
+	containers, err := r.backupContainers(backup, cluster, reqLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 	return job, nil
 }
 
-func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster) ([]corev1.Container, error) {
+func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) ([]corev1.Container, error) {
 	backupSpec := backup.Spec.Backend
 	bucket, err := backupSpec.Container()
 	if err != nil {
@@ -323,6 +323,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				)
 				return nil, err
 			}
+			reqLogger.V(3).Info("backup", "folderName", folderName)
 			container := corev1.Container{
 				Name:            fmt.Sprintf("%s-%d", redisv1alpha1.JobTypeBackup, i),
 				Image:           backup.Spec.Image,
@@ -452,9 +453,19 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 	if err != nil {
 		// TODO: Sometimes the job is created successfully, but it cannot be obtained immediately.
 		if errors.IsNotFound(err) {
-			msg := "One Backup is already Running"
+			msg := "One Backup is already Running, Job not found"
 			reqLogger.Info(msg, "err", err)
 			r.markAsIgnoredBackup(backup, msg)
+			delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+			if err := r.crController.UpdateCR(backup); err != nil {
+				r.recorder.Event(
+					backup,
+					corev1.EventTypeWarning,
+					event.BackupError,
+					err.Error(),
+				)
+				return err
+			}
 			r.recorder.Event(
 				backup,
 				corev1.EventTypeWarning,
@@ -547,6 +558,16 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 				msg := "One Backup is already Running"
 				reqLogger.Info(msg, o.Name, backup.Name)
 				r.markAsIgnoredBackup(backup, msg)
+				delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+				if err := r.crController.UpdateCR(backup); err != nil {
+					r.recorder.Event(
+						backup,
+						corev1.EventTypeWarning,
+						event.BackupError,
+						err.Error(),
+					)
+					return err
+				}
 				r.recorder.Event(
 					backup,
 					corev1.EventTypeWarning,
@@ -554,6 +575,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 					msg,
 				)
 			}
+			break
 		}
 	}
 
