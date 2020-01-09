@@ -101,6 +101,7 @@ func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.Distr
 			cluster.Spec.Image = backup.Status.ClusterImage
 		}
 		cluster.Spec.MasterSize = backup.Status.MasterSize
+		// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
 		cluster.Spec.ClusterReplicas = 0
 	}
 	cluster.Validate(reqLogger)

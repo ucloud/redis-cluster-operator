@@ -256,6 +256,8 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		if err := r.crController.UpdateCRStatus(instance); err != nil {
 			return reconcile.Result{}, err
 		}
+		// set ClusterReplicas = Backup.Status.ClusterReplicas,
+		// next Reconcile loop the statefulSet's replicas will increase by ClusterReplicas, then start the slave node
 		instance.Spec.ClusterReplicas = instance.Status.Restore.Backup.Status.ClusterReplicas
 		if err := r.crController.UpdateCR(instance); err != nil {
 			return reconcile.Result{}, err
