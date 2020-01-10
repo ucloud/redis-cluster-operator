@@ -113,17 +113,17 @@ func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 }
 
 func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
-	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize, reqLogger) {
+	if utils.CompareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---NumberOfMaster")
 		return true
 	}
 
-	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
+	if utils.CompareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MinReplicationFactor")
 		return true
 	}
 
-	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
+	if utils.CompareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MaxReplicationFactor")
 		return true
 	}

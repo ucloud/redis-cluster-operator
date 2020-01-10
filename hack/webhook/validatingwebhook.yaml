@@ -9,7 +9,7 @@ webhooks:
     clientConfig:
       service:
         name: drc-admission-webhook
-        namespace: shu
+        namespace: default
         path: /validate-redis-kun-v1alpha1-distributedrediscluster
       caBundle: ${CA_BUNDLE}
     rules:
@@ -21,4 +21,4 @@ webhooks:
         apiVersions:
           - v1alpha1
         resources:
-          - DistributedRedisCluster
+          - distributedredisclusters

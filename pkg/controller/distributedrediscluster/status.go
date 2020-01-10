@@ -10,6 +10,7 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 func SetClusterFailed(status *redisv1alpha1.DistributedRedisClusterStatus, reason string) {
@@ -122,23 +123,23 @@ func (r *ReconcileDistributedRedisCluster) updateClusterIfNeed(cluster *redisv1a
 }
 
 func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLogger logr.Logger) bool {
-	if compareStringValue("ClusterStatus", string(old.Status), string(new.Status), reqLogger) {
+	if utils.CompareStringValue("ClusterStatus", string(old.Status), string(new.Status), reqLogger) {
 		return true
 	}
 
-	if compareStringValue("ClusterStatusReason", old.Reason, new.Reason, reqLogger) {
+	if utils.CompareStringValue("ClusterStatusReason", old.Reason, new.Reason, reqLogger) {
 		return true
 	}
 
-	if compareInts("NumberOfMaster", old.NumberOfMaster, new.NumberOfMaster, reqLogger) {
+	if utils.CompareInt32("NumberOfMaster", old.NumberOfMaster, new.NumberOfMaster, reqLogger) {
 		return true
 	}
 
-	if compareInts("len(Nodes)", int32(len(old.Nodes)), int32(len(new.Nodes)), reqLogger) {
+	if utils.CompareInt32("len(Nodes)", int32(len(old.Nodes)), int32(len(new.Nodes)), reqLogger) {
 		return true
 	}
 
-	if compareInts("restoreSucceeded", old.Restore.RestoreSucceeded, new.Restore.RestoreSucceeded, reqLogger) {
+	if utils.CompareInt32("restoreSucceeded", old.Restore.RestoreSucceeded, new.Restore.RestoreSucceeded, reqLogger) {
 		return true
 	}
 
@@ -161,19 +162,19 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLog
 }
 
 func compareNodes(nodeA, nodeB *redisv1alpha1.RedisClusterNode, reqLogger logr.Logger) bool {
-	if compareStringValue("Node.IP", nodeA.IP, nodeB.IP, reqLogger) {
+	if utils.CompareStringValue("Node.IP", nodeA.IP, nodeB.IP, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.MasterRef", nodeA.MasterRef, nodeB.MasterRef, reqLogger) {
+	if utils.CompareStringValue("Node.MasterRef", nodeA.MasterRef, nodeB.MasterRef, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.PodName", nodeA.PodName, nodeB.PodName, reqLogger) {
+	if utils.CompareStringValue("Node.PodName", nodeA.PodName, nodeB.PodName, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.Port", nodeA.Port, nodeB.Port, reqLogger) {
+	if utils.CompareStringValue("Node.Port", nodeA.Port, nodeB.Port, reqLogger) {
 		return true
 	}
-	if compareStringValue("Node.Role", string(nodeA.Role), string(nodeB.Role), reqLogger) {
+	if utils.CompareStringValue("Node.Role", string(nodeA.Role), string(nodeB.Role), reqLogger) {
 		return true
 	}
 
@@ -192,37 +193,6 @@ func compareNodes(nodeA, nodeB *redisv1alpha1.RedisClusterNode, reqLogger logr.L
 
 	if (sizeSlotsA != 0) && !reflect.DeepEqual(nodeA.Slots, nodeB.Slots) {
 		reqLogger.V(4).Info(fmt.Sprintf("compare Node.Slote deepEqual: %v - %v", nodeA.Slots, nodeB.Slots))
-		return true
-	}
-
-	return false
-}
-
-func compareIntValue(name string, old, new *int32, reqLogger logr.Logger) bool {
-	if old == nil && new == nil {
-		return true
-	} else if old == nil || new == nil {
-		return false
-	} else if *old != *new {
-		reqLogger.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, *old, *new))
-		return true
-	}
-
-	return false
-}
-
-func compareInts(name string, old, new int32, reqLogger logr.Logger) bool {
-	if old != new {
-		reqLogger.V(4).Info(fmt.Sprintf("compare status.%s: %d - %d", name, old, new))
-		return true
-	}
-
-	return false
-}
-
-func compareStringValue(name string, old, new string, reqLogger logr.Logger) bool {
-	if old != new {
-		reqLogger.V(4).Info(fmt.Sprintf("compare %s: %s - %s", name, old, new))
 		return true
 	}
 
