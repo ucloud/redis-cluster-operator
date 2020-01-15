@@ -49,8 +49,8 @@ type Redis struct {
 	DialTimeout        int
 	ClusterNodeTimeout int
 	ConfigFileName     string
-	renameCommandsPath string
-	renameCommandsFile string
+	RenameCommandsPath string
+	RenameCommandsFile string
 	HTTPServerAddr     string
 	ServerBin          string
 	ServerPort         string
@@ -65,8 +65,8 @@ func (r *Redis) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&r.DialTimeout, "rdt", DefaultRedisTimeout, "redis dial timeout (ms)")
 	fs.IntVar(&r.ClusterNodeTimeout, "cluster-node-timeout", DefaultClusterNodeTimeout, "redis node timeout (ms)")
 	fs.StringVar(&r.ConfigFileName, "c", RedisConfigFileDefault, "redis config file path")
-	fs.StringVar(&r.renameCommandsPath, "rename-command-path", RedisRenameCommandsDefaultPath, "Path to the folder where rename-commands option for redis are available")
-	fs.StringVar(&r.renameCommandsFile, "rename-command-file", RedisRenameCommandsDefaultFile, "Name of the file where rename-commands option for redis are available, disabled if empty")
+	fs.StringVar(&r.RenameCommandsPath, "rename-command-path", RedisRenameCommandsDefaultPath, "Path to the folder where rename-commands option for redis are available")
+	fs.StringVar(&r.RenameCommandsFile, "rename-command-file", RedisRenameCommandsDefaultFile, "Name of the file where rename-commands option for redis are available, disabled if empty")
 	fs.Uint32Var(&r.MaxMemory, "max-memory", RedisMaxMemoryDefault, "redis max memory")
 	fs.StringVar(&r.MaxMemoryPolicy, "max-memory-policy", RedisMaxMemoryPolicyDefault, "redis max memory evition policy")
 	fs.StringVar(&r.ServerBin, "bin", RedisServerBinDefault, "redis server binary file name")
@@ -77,8 +77,8 @@ func (r *Redis) AddFlags(fs *pflag.FlagSet) {
 
 // GetRenameCommandsFile return the path to the rename command file, or empty string if not define
 func (r *Redis) GetRenameCommandsFile() string {
-	if r.renameCommandsFile == "" {
+	if r.RenameCommandsFile == "" {
 		return ""
 	}
-	return path.Join(r.renameCommandsPath, r.renameCommandsFile)
+	return path.Join(r.RenameCommandsPath, r.RenameCommandsFile)
 }
