@@ -125,10 +125,10 @@ func DecodeNodeInfos(input *string, addr string, log logr.Logger) *NodeInfos {
 
 			if strings.HasPrefix(values[2], "myself") {
 				infos.Node = node
-				log.V(7).Info("getting node info for node: ", node)
+				log.V(7).Info("getting node info for node", "node", node)
 			} else {
 				infos.Friends = append(infos.Friends, node)
-				log.V(7).Info("adding node to slice: ", node)
+				log.V(7).Info("adding node to slice", "node", node)
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func (c *ClusterInfos) ComputeStatus(log logr.Logger) bool {
 
 	consolidatedView := c.GetNodes().SortByFunc(LessByID)
 	consolidatedSignature := getConfigSignature(consolidatedView)
-	log.V(7).Info("consolidated view:\n ", consolidatedSignature)
+	log.V(7).Info("consolidated view", "consolidatedSignature:\n", consolidatedSignature)
 	for addr, nodeinfos := range c.Infos {
 		nodesView := append(nodeinfos.Friends, nodeinfos.Node).SortByFunc(LessByID)
 		nodeSignature := getConfigSignature(nodesView)
@@ -201,7 +201,7 @@ func getConfigSignature(nodes Nodes) ConfigSignature {
 	signature := ConfigSignature{}
 	for _, node := range nodes {
 		if node.Role == RedisMasterRole {
-			signature[node.ID] = SlotSlice(node.Slots)
+			signature[node.IPPort()] = SlotSlice(node.Slots)
 		}
 	}
 	return signature
