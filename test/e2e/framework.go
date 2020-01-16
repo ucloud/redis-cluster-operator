@@ -126,7 +126,15 @@ func (f *Framework) CreateRedisClusterPassword(password string) error {
 // UpdateRedisCluster update a DistributedRedisCluster in test namespace
 func (f *Framework) UpdateRedisCluster(instance *redisv1alpha1.DistributedRedisCluster) error {
 	f.Logf("updating DistributedRedisCluster %s", instance.Name)
-	return f.Client.Update(context.TODO(), instance)
+	cluster := &redisv1alpha1.DistributedRedisCluster{}
+	if err := f.Client.Get(context.TODO(), types.NamespacedName{
+		Namespace: f.Namespace(),
+		Name:      instance.Name,
+	}, cluster); err != nil {
+		return err
+	}
+	cluster.Spec = instance.Spec
+	return f.Client.Update(context.TODO(), cluster)
 }
 
 // DeleteRedisCluster delete a DistributedRedisCluster in test namespace
