@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -54,6 +55,7 @@ func NewDistributedRedisCluster(name, namespace, image, passwordName string, mas
 		"hz":         "11",
 		"maxclients": "101",
 	}
+	storageClassName := os.Getenv("STORAGECLASSNAME")
 	return &redisv1alpha1.DistributedRedisCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -79,12 +81,12 @@ func NewDistributedRedisCluster(name, namespace, image, passwordName string, mas
 					corev1.ResourceMemory: resource.MustParse("1024Mi"),
 				},
 			},
-			//Storage: &redisv1alpha1.RedisStorage{
-			//	Type:        "persistent-claim",
-			//	Size:        resource.MustParse("1Gi"),
-			//	Class:       "storageClass",
-			//	DeleteClaim: true,
-			//},
+			Storage: &redisv1alpha1.RedisStorage{
+				Type:        "persistent-claim",
+				Size:        resource.MustParse("1Gi"),
+				Class:       storageClassName,
+				DeleteClaim: true,
+			},
 			Monitor: &redisv1alpha1.AgentSpec{
 				Image: exporterImage,
 				Prometheus: &redisv1alpha1.PrometheusSpec{
@@ -115,13 +117,27 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 		if result.Status.Status != redisv1alpha1.ClusterStatusOK {
 			return LogAndReturnErrorf("DistributedRedisCluster %s status not healthy, current: %s", drc.Name, result.Status.Status)
 		}
+		stsList, err := f.GetDRCStatefulSetByLabels(getLabels(drc))
+		if err != nil {
+			f.Logf("GetDRCStatefulSetByLabels err: %s", err)
+			return err
+		}
+		for _, sts := range stsList.Items {
+			if sts.Status.ReadyReplicas != (drc.Spec.ClusterReplicas + 1) {
+				return LogAndReturnErrorf("DistributedRedisCluster %s wrong ready replicas, want: %d, got: %d",
+					drc.Name, drc.Spec.ClusterReplicas+1, sts.Status.ReadyReplicas)
+			}
+		}
+
 		password, err := getClusterPassword(f.Client, drc)
 		if err != nil {
-			return LogAndReturnErrorf("getClusterPassword from secret err: ", err)
+			f.Logf("getClusterPassword err: %s", err)
+			return err
 		}
 		podList, err := f.GetDRCPodsByLabels(getLabels(drc))
 		if err != nil {
-			return LogAndReturnErrorf("GetDRCPodsByLabels err: ", err)
+			f.Logf("GetDRCPodsByLabels err: %s", err)
+			return err
 		}
 		if len(podList.Items) != int(drc.Spec.MasterSize*(drc.Spec.ClusterReplicas+1)) {
 			return LogAndReturnErrorf("DistributedRedisCluster %s wrong node number, masterSize %d, clusterReplicas %d, got node number %d",
@@ -140,6 +156,18 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 		if _, err := redisAdmin.GetClusterInfos(); err != nil {
 			f.Logf("DistributedRedisCluster Cluster nodes: %s", err)
 			return err
+		}
+		for addr, c := range redisAdmin.Connections().GetAll() {
+			configs, err := redisAdmin.GetAllConfig(c, addr)
+			if err != nil {
+				f.Logf("DistributedRedisCluster CONFIG GET: %s", err)
+				return err
+			}
+			for key, value := range drc.Spec.Config {
+				if value != configs[key] {
+					return LogAndReturnErrorf("DistributedRedisCluster %s wrong redis config, key: %s, want: %s, got: %s", drc.Name, key, value, configs[key])
+				}
+			}
 		}
 
 		return nil
@@ -193,4 +221,45 @@ func getClusterPassword(client client.Client, cluster *redisv1alpha1.Distributed
 		return "", err
 	}
 	return string(secret.Data[passwordKey]), nil
+}
+
+func ChangeDRCRedisConfig(drc *redisv1alpha1.DistributedRedisCluster) {
+	drc.Spec.Config["hz"] = "15"
+	drc.Spec.Config["maxclients"] = "105"
+}
+
+func ScaleUPDRC(drc *redisv1alpha1.DistributedRedisCluster) {
+	drc.Spec.MasterSize = 4
+}
+
+func ScaleUPDown(drc *redisv1alpha1.DistributedRedisCluster) {
+	drc.Spec.MasterSize = 3
+}
+
+func RollingUpdateDRC(drc *redisv1alpha1.DistributedRedisCluster) {
+	drc.Spec.Image = Redis5_0_6
+}
+
+func DeleteMasterPodForDRC(drc *redisv1alpha1.DistributedRedisCluster, client client.Client) {
+	result := &redisv1alpha1.DistributedRedisCluster{}
+	if err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: drc.Namespace,
+		Name:      drc.Name,
+	}, result); err != nil {
+		Failf("can not get DistributedRedisCluster err: %s", err.Error())
+	}
+	for _, node := range result.Status.Nodes {
+		if node.Role == redisv1alpha1.RedisClusterNodeRoleMaster {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      node.PodName,
+					Namespace: drc.Namespace,
+				},
+			}
+			Logf("deleting pod %s", node.PodName)
+			if err := client.Delete(context.TODO(), pod); err != nil {
+				Failf("can not delete DistributedRedisCluster's pod, err: %s", err)
+			}
+		}
+	}
 }

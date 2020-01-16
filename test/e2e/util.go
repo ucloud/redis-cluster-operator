@@ -34,7 +34,7 @@ func LogAndReturnErrorf(format string, args ...interface{}) error {
 	return fmt.Errorf(format, args...)
 }
 
-var letters = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+var letters = []rune("abcdefghijklmnopqrstuvwxyz")
 
 // RandString create a random string
 func RandString(n int) string {

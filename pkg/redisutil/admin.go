@@ -44,6 +44,8 @@ type IAdmin interface {
 	SetConfigEpoch() error
 	// SetConfigIfNeed set redis config
 	SetConfigIfNeed(newConfig map[string]string) error
+	// GetAllConfig get redis config by CONFIG GET *
+	GetAllConfig(c IClient, addr string) (map[string]string, error)
 	// AttachNodeToCluster command use to connect a Node to the cluster
 	// the connection will be done on a random node part of the connection pool
 	AttachNodeToCluster(addr string) error
@@ -311,7 +313,8 @@ func (a *Admin) AttachNodeToCluster(addr string) error {
 	return nil
 }
 
-func (a *Admin) getAllConfig(c IClient, addr string) (map[string]string, error) {
+// GetAllConfig get redis config by CONFIG GET *
+func (a *Admin) GetAllConfig(c IClient, addr string) (map[string]string, error) {
 	resp := c.Cmd("CONFIG", "GET", "*")
 	if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve config"); err != nil {
 		return nil, err
@@ -331,7 +334,7 @@ func (a *Admin) getAllConfig(c IClient, addr string) (map[string]string, error) 
 // SetConfigIfNeed set redis config
 func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 	for addr, c := range a.Connections().GetAll() {
-		oldConfig, err := a.getAllConfig(c, addr)
+		oldConfig, err := a.GetAllConfig(c, addr)
 		if err != nil {
 			return err
 		}

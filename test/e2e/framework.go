@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -147,6 +148,12 @@ func (f *Framework) GetDRCPodsByLabels(labels map[string]string) (*corev1.PodLis
 	foundPods := &corev1.PodList{}
 	err := f.Client.List(context.TODO(), foundPods, client.InNamespace(f.nameSpace), client.MatchingLabels(labels))
 	return foundPods, err
+}
+
+func (f *Framework) GetDRCStatefulSetByLabels(labels map[string]string) (*appsv1.StatefulSetList, error) {
+	foundSts := &appsv1.StatefulSetList{}
+	err := f.Client.List(context.TODO(), foundSts, client.InNamespace(f.nameSpace), client.MatchingLabels(labels))
+	return foundSts, err
 }
 
 func (f *Framework) createTestNamespace() error {
