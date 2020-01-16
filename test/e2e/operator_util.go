@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	store "kmodules.xyz/objectstore-api/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -30,7 +31,13 @@ const (
 
 	exporterImage = "uhub.service.ucloud.cn/operator/redis_exporter:latest"
 
+	BackupImage = "uhub.service.ucloud.cn/operator/redis-tools:5.0.4"
+
 	passwordKey = "password"
+	S3ID        = "AWS_ACCESS_KEY_ID"
+	S3KEY       = "AWS_SECRET_ACCESS_KEY"
+	S3ENDPOINT  = "S3_ENDPOINT"
+	S3BUCKET    = "S3_BUCKET"
 
 	// RedisRenameCommandsDefaultPath default path to volume storing rename commands
 	RedisRenameCommandsDefaultPath = "/etc/secret-volume"
@@ -240,6 +247,16 @@ func RollingUpdateDRC(drc *redisv1alpha1.DistributedRedisCluster) {
 	drc.Spec.Image = Redis5_0_6
 }
 
+func RestoreDRC(drc *redisv1alpha1.DistributedRedisCluster, drcb *redisv1alpha1.RedisClusterBackup) {
+	drc.Name = RandString(8)
+	drc.Spec.Init = &redisv1alpha1.InitSpec{
+		BackupSource: &redisv1alpha1.BackupSourceSpec{
+			Namespace: drcb.Namespace,
+			Name:      drcb.Name,
+		},
+	}
+}
+
 func DeleteMasterPodForDRC(drc *redisv1alpha1.DistributedRedisCluster, client client.Client) {
 	result := &redisv1alpha1.DistributedRedisCluster{}
 	if err := client.Get(context.TODO(), types.NamespacedName{
@@ -261,5 +278,46 @@ func DeleteMasterPodForDRC(drc *redisv1alpha1.DistributedRedisCluster, client cl
 				Failf("can not delete DistributedRedisCluster's pod, err: %s", err)
 			}
 		}
+	}
+}
+
+func NewRedisClusterBackup(name, namespace, image, drcName, storageSecretName, s3Endpoint, s3Bucket string) *redisv1alpha1.RedisClusterBackup {
+	return &redisv1alpha1.RedisClusterBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Annotations: map[string]string{
+				"redis.kun/scope": "cluster-scoped",
+			},
+		},
+		Spec: redisv1alpha1.RedisClusterBackupSpec{
+			Image:            image,
+			RedisClusterName: drcName,
+			Backend: store.Backend{
+				StorageSecretName: storageSecretName,
+				S3: &store.S3Spec{
+					Endpoint: s3Endpoint,
+					Bucket:   s3Bucket,
+				},
+			},
+		},
+	}
+
+}
+
+func IsRedisClusterBackupProperly(f *Framework, drcb *redisv1alpha1.RedisClusterBackup) func() error {
+	return func() error {
+		result := &redisv1alpha1.RedisClusterBackup{}
+		if err := f.Client.Get(context.TODO(), types.NamespacedName{
+			Namespace: f.Namespace(),
+			Name:      drcb.Name,
+		}, result); err != nil {
+			f.Logf("can not get DistributedRedisCluster err: %s", err.Error())
+			return err
+		}
+		if result.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
+			return LogAndReturnErrorf("RedisClusterBackup %s status not Succeeded, current: %s", drcb.Name, result.Status.Phase)
+		}
+		return nil
 	}
 }

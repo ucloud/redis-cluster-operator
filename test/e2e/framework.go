@@ -99,6 +99,20 @@ func (f *Framework) CreateRedisCluster(instance *redisv1alpha1.DistributedRedisC
 	return err
 }
 
+// CreateRedisClusterBackup creates a RedisClusterBackup in test namespace
+func (f *Framework) CreateRedisClusterBackup(instance *redisv1alpha1.RedisClusterBackup) error {
+	f.Logf("Creating RedisClusterBackup %s", instance.Name)
+	result := &redisv1alpha1.RedisClusterBackup{}
+	err := f.Client.Get(context.TODO(), types.NamespacedName{
+		Namespace: f.Namespace(),
+		Name:      instance.Name,
+	}, result)
+	if errors.IsNotFound(err) {
+		return f.Client.Create(context.TODO(), instance)
+	}
+	return err
+}
+
 // CreateRedisClusterPassword creates a password for DistributedRedisCluster
 func (f *Framework) CreateRedisClusterPassword(password string) error {
 	name := f.PasswordName()
@@ -110,6 +124,32 @@ func (f *Framework) CreateRedisClusterPassword(password string) error {
 		},
 		StringData: map[string]string{
 			passwordKey: password,
+		},
+		Type: "Opaque",
+	}
+	result := &corev1.Secret{}
+	err := f.Client.Get(context.TODO(), types.NamespacedName{
+		Namespace: f.Namespace(),
+		Name:      name,
+	}, result)
+	if errors.IsNotFound(err) {
+		return f.Client.Create(context.TODO(), secret)
+	}
+	return err
+}
+
+// CreateS3Secret creates a secret for RedisClusterBackup
+func (f *Framework) CreateS3Secret(id, key string) error {
+	name := f.S3SecretName()
+	f.Logf("Creating RedisClusterBackup secret %s", name)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: f.Namespace(),
+		},
+		StringData: map[string]string{
+			S3ID:  id,
+			S3KEY: key,
 		},
 		Type: "Opaque",
 	}
@@ -234,6 +274,10 @@ func (f *Framework) roleName() string {
 
 func (f *Framework) PasswordName() string {
 	return fmt.Sprintf("redis-admin-passwd")
+}
+
+func (f *Framework) S3SecretName() string {
+	return fmt.Sprintf("s3-secret")
 }
 
 func (f *Framework) deleteRBAC() error {

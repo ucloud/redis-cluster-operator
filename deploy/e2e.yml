@@ -22,6 +22,14 @@ spec:
               value: "60m"
             - name: STORAGECLASSNAME
               value: "csi-rbd-sc"
+            - name: AWS_ACCESS_KEY_ID
+              value: ""
+            - name: AWS_SECRET_ACCESS_KEY
+              value: ""
+            - name: S3_ENDPOINT
+              value: ""
+            - name: S3_BUCKET
+              value: ""
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
