@@ -44,6 +44,9 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
 	} else if updated {
+		// update cluster status = RollingUpdate immediately when cluster's image or resource or password changed
+		SetClusterUpdating(&cluster.Status, "cluster spec updated")
+		r.crController.UpdateCRStatus(cluster)
 		waiter := &waitStatefulSetUpdating{
 			name:                  "waitStatefulSetUpdating",
 			timeout:               30 * time.Second * time.Duration(cluster.Spec.ClusterReplicas+2),
@@ -203,6 +206,9 @@ func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 
 func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, currentMasterNum int, statefulSetNodes map[string]redisutil.Nodes) error {
 	cluster := ctx.cluster
+	SetClusterRebalancing(&cluster.Status,
+		fmt.Sprintf("scale down, currentMasterSize: %d, expectMasterSize %d", currentMasterNum, cluster.Spec.MasterSize))
+	r.crController.UpdateCRStatus(cluster)
 	admin := ctx.admin
 	expectMasterNum := int(cluster.Spec.MasterSize)
 	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
