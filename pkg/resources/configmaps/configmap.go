@@ -20,7 +20,7 @@ failover() {
     echo "Do CLUSTER FAILOVER"
     masterID=$(cat ${CLUSTER_CONFIG} | grep "myself" | awk '{print $1}')
     echo "Master: ${masterID}"
-    slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk '{NR==1;print $2}' | sed 's/:6379@16379//')
+    slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk 'NR==1{print $2}' | sed 's/:6379@16379//')
     echo "Slave: ${slave}"
     redis-cli -h ${slave} -a "${REDIS_PASSWORD}" CLUSTER FAILOVER
 	echo "Wait for MASTER <-> SLAVE syncFinished"
