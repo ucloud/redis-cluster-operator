@@ -12,6 +12,7 @@ import (
 
 var f *e2e.Framework
 var drc *redisv1alpha1.DistributedRedisCluster
+var rdrc *redisv1alpha1.DistributedRedisCluster
 var drcb *redisv1alpha1.RedisClusterBackup
 
 func TestDrcb(t *testing.T) {

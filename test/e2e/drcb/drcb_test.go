@@ -33,36 +33,36 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 		Context("when the RedisClusterBackup is created", func() {
 			It("should restore from backup", func() {
 				Ω(f.DeleteRedisCluster(drc)).Should(Succeed())
-				e2e.RestoreDRC(drc, drcb)
-				Ω(f.CreateRedisCluster(drc)).Should(Succeed())
-				Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+				rdrc = e2e.RestoreDRC(drc, drcb)
+				Ω(f.CreateRedisCluster(rdrc)).Should(Succeed())
+				Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 			})
 			Context("when restore is succeeded", func() {
 				It("should change redis config for a DistributedRedisCluster", func() {
-					e2e.ChangeDRCRedisConfig(drc)
-					Ω(f.UpdateRedisCluster(drc)).Should(Succeed())
-					Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+					e2e.ChangeDRCRedisConfig(rdrc)
+					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
+					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 				})
 				It("should recover from accidentally deleting master pods", func() {
-					e2e.DeleteMasterPodForDRC(drc, f.Client)
-					Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+					e2e.DeleteMasterPodForDRC(rdrc, f.Client)
+					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 				})
 				It("should scale up a DistributedRedisCluster", func() {
-					e2e.ScaleUPDRC(drc)
-					Ω(f.UpdateRedisCluster(drc)).Should(Succeed())
-					Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+					e2e.ScaleUPDRC(rdrc)
+					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
+					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 				})
 				Context("when the scale up succeeded", func() {
 					It("should scale down a DistributedRedisCluster", func() {
-						e2e.ScaleUPDown(drc)
-						Ω(f.UpdateRedisCluster(drc)).Should(Succeed())
-						Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+						e2e.ScaleUPDown(rdrc)
+						Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
+						Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 					})
 				})
 				It("should update the DistributedRedisCluster minor version", func() {
-					e2e.RollingUpdateDRC(drc)
-					Ω(f.UpdateRedisCluster(drc)).Should(Succeed())
-					Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+					e2e.RollingUpdateDRC(rdrc)
+					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
+					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 				})
 			})
 		})

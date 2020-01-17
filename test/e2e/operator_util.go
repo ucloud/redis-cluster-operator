@@ -247,12 +247,29 @@ func RollingUpdateDRC(drc *redisv1alpha1.DistributedRedisCluster) {
 	drc.Spec.Image = Redis5_0_6
 }
 
-func RestoreDRC(drc *redisv1alpha1.DistributedRedisCluster, drcb *redisv1alpha1.RedisClusterBackup) {
-	drc.Name = RandString(8)
-	drc.Spec.Init = &redisv1alpha1.InitSpec{
-		BackupSource: &redisv1alpha1.BackupSourceSpec{
-			Namespace: drcb.Namespace,
-			Name:      drcb.Name,
+func RestoreDRC(drc *redisv1alpha1.DistributedRedisCluster, drcb *redisv1alpha1.RedisClusterBackup) *redisv1alpha1.DistributedRedisCluster {
+	name := RandString(8)
+	return &redisv1alpha1.DistributedRedisCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: drc.Namespace,
+			Annotations: map[string]string{
+				"redis.kun/scope": "cluster-scoped",
+			},
+		},
+		Spec: redisv1alpha1.DistributedRedisClusterSpec{
+			MasterSize:      drc.Spec.MasterSize,
+			ClusterReplicas: drc.Spec.ClusterReplicas,
+			Config:          drc.Spec.Config,
+			PasswordSecret:  drc.Spec.PasswordSecret,
+			Resources:       drc.Spec.Resources,
+			Storage:         drc.Spec.Storage,
+			Monitor:         drc.Spec.Monitor,
+			Annotations:     drc.Spec.Annotations,
+			Init: &redisv1alpha1.InitSpec{BackupSource: &redisv1alpha1.BackupSourceSpec{
+				Namespace: drcb.Namespace,
+				Name:      drcb.Name,
+			}},
 		},
 	}
 }
