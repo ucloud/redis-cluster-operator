@@ -195,12 +195,12 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 			r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
 				Info("creating a new configMap")
 			cm := configmaps.NewConfigMapForCR(cluster, labels)
-			if err = r.configMapClient.CreateConfigMap(cm); err != nil {
-				return err
+			if err2 := r.configMapClient.CreateConfigMap(cm); err2 != nil {
+				return err2
 			}
+		} else {
+			return err
 		}
-		return err
-
 	}
 
 	if cluster.IsRestoreFromBackup() {
