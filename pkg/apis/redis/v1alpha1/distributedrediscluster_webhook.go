@@ -58,8 +58,11 @@ func (in *DistributedRedisCluster) ValidateUpdate(old runtime.Object) error {
 		}
 	}
 
-	if compareObj(in, oldObj, log) && in.Status.Status != ClusterStatusOK {
-		return fmt.Errorf("redis cluster status: %s, wait for the status to become %s before operating", in.Status.Status, ClusterStatusOK)
+	if oldObj.Status.Status == "" {
+		return nil
+	}
+	if compareObj(in, oldObj, log) && oldObj.Status.Status != ClusterStatusOK {
+		return fmt.Errorf("redis cluster status: [%s], wait for the status to become %s before operating", oldObj.Status.Status, ClusterStatusOK)
 	}
 
 	return nil

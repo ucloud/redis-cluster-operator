@@ -85,30 +85,49 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error 
 }
 
 func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
-	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
-		if cluster.Status.Restore.Backup == nil {
-			initSpec := cluster.Spec.Init
-			backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
-			if err != nil {
-				reqLogger.Error(err, "GetRedisClusterBackup")
-				return err
-			}
-			if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
-				return fmt.Errorf("backup is still running")
-			}
-			cluster.Status.Restore.Backup = backup
-		}
+	var update bool
+	var err error
 
-		backup := cluster.Status.Restore.Backup
-		if cluster.Spec.Image == "" {
-			cluster.Spec.Image = backup.Status.ClusterImage
+	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
+		update, err = r.validateRestore(cluster, reqLogger)
+		if err != nil {
+			return err
 		}
-		cluster.Spec.MasterSize = backup.Status.MasterSize
-		// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
-		cluster.Spec.ClusterReplicas = 0
 	}
-	cluster.Validate(reqLogger)
+	updateDefault := cluster.DefaultSpec(reqLogger)
+	if update || updateDefault {
+		return r.crController.UpdateCR(cluster)
+	}
 	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) (bool, error) {
+	update := false
+	if cluster.Status.Restore.Backup == nil {
+		initSpec := cluster.Spec.Init
+		backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
+		if err != nil {
+			reqLogger.Error(err, "GetRedisClusterBackup")
+			return update, err
+		}
+		if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
+			reqLogger.Error(nil, "backup is still running")
+			return update, fmt.Errorf("backup is still running")
+		}
+		cluster.Status.Restore.Backup = backup
+	}
+	backup := cluster.Status.Restore.Backup
+	if cluster.Spec.Image == "" {
+		cluster.Spec.Image = backup.Status.ClusterImage
+		update = true
+	}
+	if cluster.Spec.MasterSize != backup.Status.MasterSize {
+		cluster.Spec.MasterSize = backup.Status.MasterSize
+		update = true
+	}
+	// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
+	cluster.Spec.ClusterReplicas = 0
+	return update, nil
 }
 
 func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) error {

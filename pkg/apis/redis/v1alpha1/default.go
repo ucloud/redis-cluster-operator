@@ -17,43 +17,48 @@ const (
 	defaultRedisImage  = "redis:5.0.4-alpine"
 )
 
-func (in *DistributedRedisCluster) Validate(log logr.Logger) {
+func (in *DistributedRedisCluster) DefaultSpec(log logr.Logger) bool {
+	update := false
 	if in.Spec.MasterSize < minMasterSize {
 		in.Spec.MasterSize = minMasterSize
+		update = true
 	}
-
-	//if in.Spec.ClusterReplicas < minClusterReplicas {
-	//	in.Spec.ClusterReplicas = minClusterReplicas
-	//}
 
 	if in.Spec.Image == "" {
 		in.Spec.Image = defaultRedisImage
+		update = true
 	}
 
 	if in.Spec.ServiceName == "" {
 		in.Spec.ServiceName = in.Name
+		update = true
 	}
 
 	if in.Spec.Resources == nil || in.Spec.Resources.Size() == 0 {
 		in.Spec.Resources = defaultResource()
+		update = true
 	}
 
 	mon := in.Spec.Monitor
 	if mon != nil {
 		if mon.Prometheus == nil {
 			mon.Prometheus = &PrometheusSpec{}
+			update = true
 		}
 		if mon.Prometheus.Port == 0 {
 			mon.Prometheus.Port = PrometheusExporterPortNumber
+			update = true
 		}
 		if in.Spec.Annotations == nil {
 			in.Spec.Annotations = make(map[string]string)
+			update = true
 		}
 
 		in.Spec.Annotations["prometheus.io/scrape"] = "true"
 		in.Spec.Annotations["prometheus.io/path"] = PrometheusExporterTelemetryPath
 		in.Spec.Annotations["prometheus.io/port"] = fmt.Sprintf("%d", mon.Prometheus.Port)
 	}
+	return update
 }
 
 func (in *DistributedRedisCluster) IsRestoreFromBackup() bool {
