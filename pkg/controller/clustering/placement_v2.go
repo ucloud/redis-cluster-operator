@@ -118,7 +118,9 @@ func (c *Ctx) PlaceSlaves() error {
 			}
 			if node.GetRole() == redisv1alpha1.RedisClusterNodeRoleSlave {
 				if node.MasterReferent != master.ID {
-					return fmt.Errorf("master referent conflict, %s:%s vs %s:%s", node.MasterReferent, node.IP, master.ID, master.IP)
+					c.log.Error(nil, "master referent conflict", "node ip", node.IP,
+						"current masterID", node.MasterReferent, "expect masterID", master.ID, "master IP", master.IP)
+					c.slavesByMaster[master.ID] = append(c.slavesByMaster[master.ID], node)
 				}
 				continue
 			}
