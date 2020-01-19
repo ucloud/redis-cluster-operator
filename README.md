@@ -11,6 +11,32 @@ The operator itself is built with the [Operator framework](https://github.com/op
 Each master node and its slave nodes is managed by a statefulSet, create a headless svc for each statefulSet,
 and create a clusterIP service for all nodes.
 
+Each statefulset uses PodAntiAffinity to ensure that the master and slaves are dispersed on different nodes.
+At the same time, when the operator selects the master in each statefulset, it preferentially select the pod
+with different k8s nodes as master.
+
+Table of Contents
+=================
+
+   * [redis-cluster-operator](#redis-cluster-operator)
+      * [Overview](#overview)
+      * [Prerequisites](#prerequisites)
+      * [Features](#features)
+      * [Quick Start](#quick-start)
+         * [Deploy redis cluster operator](#deploy-redis-cluster-operator)
+            * [Deploy a sample Redis Cluster](#deploy-a-sample-redis-cluster)
+            * [Scaling Up the Redis Cluster](#scaling-up-the-redis-cluster)
+            * [Scaling Down the Redis Cluster](#scaling-down-the-redis-cluster)
+            * [Backup and Restore](#backup-and-restore)
+            * [Prometheus Discovery](#prometheus-discovery)
+            * [Create Redis Cluster with password](#create-redis-cluster-with-password)
+            * [Persistent Volume](#persistent-volume)
+            * [Custom Configuration](#custom-configuration)
+            * [Custom Service](#custom-service)
+            * [Custom Resource](#custom-resource)
+      * [ValidatingWebhook](#validatingwebhook)
+      * [End to end tests](#end-to-end-tests)
+
 ## Prerequisites
 
 * go version v1.13+.
@@ -31,7 +57,6 @@ and create a clusterIP service for all nodes.
 - __Custom Configuration__
 
 - __Prometheus Discovery__
-
 
 ## Quick Start
 
@@ -143,7 +168,7 @@ spec:
 
 #### Backup and Restore
 
-**Only Ceph  object storage is supported now**
+**Only Ceph object storage is supported now**
 
 Backup
 ```
@@ -190,3 +215,11 @@ $ kubectl create -f deploy/example/custom-service.yaml
 ```
 $ kubectl create -f deploy/example/custom-resources.yaml
 ```
+
+## ValidatingWebhook
+
+see [ValidatingWebhook](/hack/webhook/README.md)
+
+## End to end tests
+
+see [e2e](/test/e2e/README.md)
