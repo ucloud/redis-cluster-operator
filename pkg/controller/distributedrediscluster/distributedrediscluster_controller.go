@@ -175,9 +175,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, nil
 		}
 		reqLogger.WithValues("err", err).Info("ensureCluster")
-		new := instance.Status.DeepCopy()
-		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new, reqLogger)
+		newStatus := instance.Status.DeepCopy()
+		SetClusterScaling(newStatus, err.Error())
+		r.updateClusterIfNeed(instance, newStatus, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
@@ -202,9 +202,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, err
 		}
 		reqLogger.WithValues("err", err).Info("waitPodReady")
-		new := instance.Status.DeepCopy()
-		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new, reqLogger)
+		newStatus := instance.Status.DeepCopy()
+		SetClusterScaling(newStatus, err.Error())
+		r.updateClusterIfNeed(instance, newStatus, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
@@ -243,9 +243,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			reqLogger.WithValues("err", err).Info("requeue")
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 		}
-		new := instance.Status.DeepCopy()
-		SetClusterFailed(new, err.Error())
-		r.updateClusterIfNeed(instance, new, reqLogger)
+		newStatus := instance.Status.DeepCopy()
+		SetClusterFailed(newStatus, err.Error())
+		r.updateClusterIfNeed(instance, newStatus, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -281,9 +281,9 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		reqLogger.Info(">>>>>> clustering")
 		err = r.syncCluster(ctx)
 		if err != nil {
-			new := instance.Status.DeepCopy()
-			SetClusterFailed(new, err.Error())
-			r.updateClusterIfNeed(instance, new, reqLogger)
+			newStatus := instance.Status.DeepCopy()
+			SetClusterFailed(newStatus, err.Error())
+			r.updateClusterIfNeed(instance, newStatus, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
