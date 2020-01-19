@@ -258,6 +258,7 @@ func RestoreDRC(drc *redisv1alpha1.DistributedRedisCluster, drcb *redisv1alpha1.
 			},
 		},
 		Spec: redisv1alpha1.DistributedRedisClusterSpec{
+			Image:           drc.Spec.Image,
 			MasterSize:      drc.Spec.MasterSize,
 			ClusterReplicas: drc.Spec.ClusterReplicas,
 			Config:          drc.Spec.Config,

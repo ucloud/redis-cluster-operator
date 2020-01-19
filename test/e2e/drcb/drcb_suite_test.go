@@ -28,7 +28,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	if err := f.DeleteRedisCluster(drc); err != nil {
+	if err := f.DeleteRedisCluster(rdrc); err != nil {
 		f.Logf("deleting DistributedRedisCluster err: %s", err.Error())
 	}
 	if err := f.AfterEach(); err != nil {
