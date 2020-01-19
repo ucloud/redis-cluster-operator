@@ -61,8 +61,9 @@ type Node struct {
 	ImportingSlots  map[Slot]string
 	ServerStartTime time.Time
 
-	NodeName string
-	PodName  string
+	NodeName    string
+	PodName     string
+	StatefulSet string
 }
 
 // Nodes represent a Node slice

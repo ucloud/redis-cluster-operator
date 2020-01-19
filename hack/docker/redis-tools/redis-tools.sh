@@ -16,7 +16,6 @@ show_help() {
   echo "    --bucket=BUCKET                name of bucket"
   echo "    --folder=FOLDER                name of folder in bucket"
   echo "    --snapshot=SNAPSHOT            name of snapshot"
-  echo "    --enable-analytics=ENABLE_ANALYTICS   send analytical events to Google Analytics (default false)"
 }
 
 RETVAL=0
@@ -31,7 +30,6 @@ REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
 REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
 OSM_CONFIG_FILE=/etc/osm/config
-ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-false}
 
 op=$1
 shift
@@ -66,10 +64,6 @@ while test $# -gt 0; do
       export REDIS_SNAPSHOT=$(echo $1 | sed -e 's/^[^=]*=//g')
       shift
       ;;
-    --analytics* | --enable-analytics*)
-      export ENABLE_ANALYTICS=$(echo $1 | sed -e 's/^[^=]*=//g')
-      shift
-      ;;
     --)
       shift
       break
@@ -96,15 +90,25 @@ fi
 # cleanup data dump dir
 mkdir -p "$REDIS_DATA_DIR"
 cd "$REDIS_DATA_DIR"
-rm -rf *
 
 case "$op" in
   backup)
     echo "Dumping database......"
+    echo "DB Host ${REDIS_HOST}"
+    SOURCE_DIR="$REDIS_DATA_DIR"/"$REDIS_SNAPSHOT"
+    mkdir -p "$SOURCE_DIR"
+
+    cd "$SOURCE_DIR"
+    # cleanup data dump dir
+    rm -rf *
+
     redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
     redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
+    pwd
+    ls -lh "$SOURCE_DIR"
     echo "Uploading dump file to the backend......."
-    osm --config "$OSM_CONFIG_FILE" sync "$REDIS_DATA_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
+    echo "From $SOURCE_DIR"
+    osm --config "$OSM_CONFIG_FILE" copy "$SOURCE_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
@@ -114,9 +118,11 @@ case "$op" in
       echo "Has been restored successfully"
       exit 0
     fi
-    index=$(echo "${POD_NAME}" | awk -F- '{print $NF}')
+    index=$(echo "${POD_NAME}" | awk -F- '{print $(NF-1)}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
-    osm --config "$OSM_CONFIG_FILE" sync ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" "$REDIS_DATA_DIR" -v
+    SOURCE_SNAPSHOT="$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT"
+    echo "From $SOURCE_SNAPSHOT"
+    osm --config "$OSM_CONFIG_FILE" sync ceph:"$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
 
     echo "Recovery successful"
     ;;

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	batch "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,9 +24,24 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
-var log = logf.Log.WithName("controller_redisclusterbackup")
+var (
+	log = logf.Log.WithName("controller_redisclusterbackup")
+
+	controllerFlagSet *pflag.FlagSet
+	// maxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run. Defaults to 1.
+	maxConcurrentReconciles int
+)
 
 const backupFinalizer = "finalizer.backup.redis.kun"
+
+func init() {
+	controllerFlagSet = pflag.NewFlagSet("controller", pflag.ExitOnError)
+	controllerFlagSet.IntVar(&maxConcurrentReconciles, "backupctr-maxconcurrent", 2, "the maximum number of concurrent Reconciles which can be run. Defaults to 1.")
+}
+
+func FlagSet() *pflag.FlagSet {
+	return controllerFlagSet
+}
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -51,19 +67,58 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("redisclusterbackup-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("redisclusterbackup-controller", mgr, controller.Options{Reconciler: r, MaxConcurrentReconciles: maxConcurrentReconciles})
 	if err != nil {
 		return err
 	}
 
+	pred := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.MetaNew) {
+				return false
+			}
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
+			// Ignore updates to CR status in which case metadata.Generation does not change
+			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true",
+					"old", e.ObjectOld, "new", e.ObjectNew)
+				return true
+			}
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
+			return true
+		},
+	}
+
 	// Watch for changes to primary resource RedisClusterBackup
-	err = c.Watch(&source.Kind{Type: &redisv1alpha1.RedisClusterBackup{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &redisv1alpha1.RedisClusterBackup{}}, &handler.EnqueueRequestForObject{}, pred)
 	if err != nil {
 		return err
 	}
 
 	jobPred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Call Job UpdateFunc")
+			if !utils.ShoudManage(e.MetaNew) {
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Job UpdateFunc Not Manage")
+				return false
+			}
 			oldObj := e.ObjectOld.(*batch.Job)
 			newObj := e.ObjectNew.(*batch.Job)
 			if isJobCompleted(oldObj, newObj) {
@@ -72,6 +127,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
 			job, ok := e.Object.(*batch.Job)
 			if !ok {
 				log.Error(nil, "Invalid Job object")
@@ -83,6 +141,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
+			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Call Job CreateFunc")
+			if !utils.ShoudManage(e.Meta) {
+				log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Job CreateFunc Not Manage")
+				return false
+			}
 			job := e.Object.(*batch.Job)
 			if job.Status.Succeeded > 0 || job.Status.Failed >= utils.Int32(job.Spec.BackoffLimit) {
 				return true
@@ -144,35 +207,35 @@ func (r *ReconcileRedisClusterBackup) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// Check if the RedisClusterBackup instance is marked to be deleted, which is
-	// indicated by the deletion timestamp being set.
-	isBackupMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
-	if isBackupMarkedToBeDeleted {
-		if contains(instance.GetFinalizers(), backupFinalizer) {
-			// Run finalization logic for backupFinalizer. If the
-			// finalization logic fails, don't remove the finalizer so
-			// that we can retry during the next reconciliation.
-			if err := r.finalizeBackup(reqLogger, instance); err != nil {
-				return reconcile.Result{}, err
-			}
+	//// Check if the RedisClusterBackup instance is marked to be deleted, which is
+	//// indicated by the deletion timestamp being set.
+	//isBackupMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
+	//if isBackupMarkedToBeDeleted {
+	//	if contains(instance.GetFinalizers(), backupFinalizer) {
+	//		// Run finalization logic for backupFinalizer. If the
+	//		// finalization logic fails, don't remove the finalizer so
+	//		// that we can retry during the next reconciliation.
+	//		if err := r.finalizeBackup(reqLogger, instance); err != nil {
+	//			return reconcile.Result{}, err
+	//		}
+	//
+	//		// Remove backupFinalizer. Once all finalizers have been
+	//		// removed, the object will be deleted.
+	//		instance.SetFinalizers(remove(instance.GetFinalizers(), backupFinalizer))
+	//		err := r.client.Update(context.TODO(), instance)
+	//		if err != nil {
+	//			return reconcile.Result{}, err
+	//		}
+	//	}
+	//	return reconcile.Result{}, nil
+	//}
 
-			// Remove backupFinalizer. Once all finalizers have been
-			// removed, the object will be deleted.
-			instance.SetFinalizers(remove(instance.GetFinalizers(), backupFinalizer))
-			err := r.client.Update(context.TODO(), instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-		return reconcile.Result{}, nil
-	}
-
-	// Add finalizer for this CR
-	if !contains(instance.GetFinalizers(), backupFinalizer) {
-		if err := r.addFinalizer(reqLogger, instance); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
+	//// Add finalizer for this CR
+	//if !contains(instance.GetFinalizers(), backupFinalizer) {
+	//	if err := r.addFinalizer(reqLogger, instance); err != nil {
+	//		return reconcile.Result{}, err
+	//	}
+	//}
 
 	if err := r.create(reqLogger, instance); err != nil {
 		return reconcile.Result{}, err
@@ -222,10 +285,14 @@ func remove(list []string, s string) []string {
 }
 
 func isJobCompleted(old, new *batch.Job) bool {
+	log.WithValues("Request.Namespace", new.Namespace).V(4).Info("isJobCompleted", "old.Succeeded", old.Status.Succeeded,
+		"new.Succeeded", new.Status.Succeeded, "old.Failed", old.Status.Failed, "new.Failed", new.Status.Failed)
 	if old.Status.Succeeded == 0 && new.Status.Succeeded > 0 {
+		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Succeeded", "job", new.Name)
 		return true
 	}
 	if old.Status.Failed < utils.Int32(old.Spec.BackoffLimit) && new.Status.Failed >= utils.Int32(new.Spec.BackoffLimit) {
+		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Failed", "job", new.Name)
 		return true
 	}
 	return false

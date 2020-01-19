@@ -1,4 +1,4 @@
-FROM golang:1.12.9-alpine3.9 as go-builder
+FROM golang:1.13.3-alpine as go-builder
 
 RUN apk update && apk upgrade && \
     apk add --no-cache ca-certificates git mercurial
@@ -19,7 +19,7 @@ RUN go mod download
 COPY pkg ./ cmd ./ version ./
 
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${GOBIN}/${PROJECT_NAME} \
-    -ldflags "-X ${REPO_PATH}/pkg/version.Version=${VERSION} -X ${REPO_PATH}/pkg/version.GitSHA=${GIT_SHA}" \
+    -ldflags "-X ${REPO_PATH}/version.Version=${VERSION} -X ${REPO_PATH}/version.GitSHA=${GIT_SHA}" \
     $BUILD_PATH
 
 # =============================================================================

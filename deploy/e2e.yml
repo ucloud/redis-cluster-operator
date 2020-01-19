@@ -1,0 +1,148 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: drc-e2e-
+  namespace: default
+  labels:
+    app: drc-e2e
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      name: drc-e2e
+    spec:
+      serviceAccountName: e2e-sa
+      restartPolicy: Never
+      containers:
+        - name: e2e
+          image: uhub.service.ucloud.cn/operator/redis-cluster-operator-e2e
+          imagePullPolicy: Always
+          env:
+            - name: TEST_TIMEOUT
+              value: "60m"
+            - name: STORAGECLASSNAME
+              value: "csi-rbd-sc"
+            - name: AWS_ACCESS_KEY_ID
+              value: ""
+            - name: AWS_SECRET_ACCESS_KEY
+              value: ""
+            - name: S3_ENDPOINT
+              value: ""
+            - name: S3_BUCKET
+              value: ""
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: e2e-cluster-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+      - pods
+      - configmaps
+      - secrets
+      - services
+      - events
+      - persistentvolumeclaims
+      - namespaces
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - clusterroles
+      - rolebindings
+      - clusterrolebindings
+    verbs:
+      - create
+      - get
+      - list
+      - delete
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - apps
+    resourceNames:
+      - redis-operator
+    resources:
+      - deployments/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - redis.kun
+    resources:
+      - '*'
+    verbs:
+      - create
+      - delete
+      - deletecollection
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: e2e-cluster-role~default
+subjects:
+  - kind: ServiceAccount
+    name: e2e-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: e2e-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: e2e-sa
+  namespace: default

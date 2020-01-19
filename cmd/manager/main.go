@@ -27,8 +27,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/ucloud/redis-cluster-operator/pkg/apis"
+	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	config2 "github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/distributedrediscluster"
+	"github.com/ucloud/redis-cluster-operator/pkg/controller/redisclusterbackup"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 	"github.com/ucloud/redis-cluster-operator/version"
 )
 
@@ -51,6 +55,9 @@ func main() {
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
 	pflag.CommandLine.AddFlagSet(zap.FlagSet())
+
+	pflag.CommandLine.AddFlagSet(distributedrediscluster.FlagSet())
+	pflag.CommandLine.AddFlagSet(redisclusterbackup.FlagSet())
 
 	// Add flags registered by imported packages (e.g. glog and
 	// controller-runtime)
@@ -77,6 +84,8 @@ func main() {
 		log.Error(err, "Failed to get watch namespace")
 		os.Exit(1)
 	}
+
+	utils.SetClusterScoped(namespace)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
@@ -143,6 +152,17 @@ func main() {
 		// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
 		if err == metrics.ErrServiceMonitorNotPresent {
 			log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
+		}
+	}
+
+	if os.Getenv("ENABLE_WEBHOOKS") == "true" {
+		log.Info("Starting the WebHook.")
+		ws := mgr.GetWebhookServer()
+		ws.CertDir = "/etc/webhook/certs"
+		ws.Port = 7443
+		if err = (&redisv1alpha1.DistributedRedisCluster{}).SetupWebhookWithManager(mgr); err != nil {
+			log.Error(err, "unable to create webHook", "webHook", "DistributedRedisCluster")
+			os.Exit(1)
 		}
 	}
 

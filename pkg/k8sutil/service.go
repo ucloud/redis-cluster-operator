@@ -16,6 +16,7 @@ type IServiceControl interface {
 	UpdateService(*corev1.Service) error
 	// DeleteService deletes a Service in a DistributedRedisCluster.
 	DeleteService(*corev1.Service) error
+	DeleteServiceByName(namespace, name string) error
 	// GetService get Service in a DistributedRedisCluster.
 	GetService(namespace, name string) (*corev1.Service, error)
 }
@@ -43,6 +44,14 @@ func (s *serviceController) UpdateService(svc *corev1.Service) error {
 // DeleteService implement the IServiceControl.Interface.
 func (s *serviceController) DeleteService(svc *corev1.Service) error {
 	return s.client.Delete(context.TODO(), svc)
+}
+
+func (s *serviceController) DeleteServiceByName(namespace, name string) error {
+	svc, err := s.GetService(namespace, name)
+	if err != nil {
+		return err
+	}
+	return s.DeleteService(svc)
 }
 
 // GetService implement the IServiceControl.Interface.

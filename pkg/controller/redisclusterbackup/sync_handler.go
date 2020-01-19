@@ -228,11 +228,12 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 		return nil, err
 	}
 
-	containers, err := r.backupContainers(backup, cluster)
+	containers, err := r.backupContainers(backup, cluster, reqLogger)
 	if err != nil {
 		return nil, err
 	}
 
+	isController := true
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -244,6 +245,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 					Kind:       redisv1alpha1.RedisClusterBackupKind,
 					Name:       backup.Name,
 					UID:        backup.UID,
+					Controller: &isController,
 				},
 			},
 		},
@@ -265,18 +267,21 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 							},
 						},
 					},
-					RestartPolicy:     corev1.RestartPolicyNever,
-					NodeSelector:      backup.Spec.PodSpec.NodeSelector,
-					Affinity:          backup.Spec.PodSpec.Affinity,
-					SchedulerName:     backup.Spec.PodSpec.SchedulerName,
-					Tolerations:       backup.Spec.PodSpec.Tolerations,
-					PriorityClassName: backup.Spec.PodSpec.PriorityClassName,
-					Priority:          backup.Spec.PodSpec.Priority,
-					SecurityContext:   backup.Spec.PodSpec.SecurityContext,
-					ImagePullSecrets:  backup.Spec.PodSpec.ImagePullSecrets,
+					RestartPolicy: corev1.RestartPolicyNever,
 				},
 			},
 		},
+	}
+	if backup.Spec.PodSpec != nil {
+		podSpec := job.Spec.Template.Spec
+		podSpec.NodeSelector = backup.Spec.PodSpec.NodeSelector
+		podSpec.Affinity = backup.Spec.PodSpec.Affinity
+		podSpec.SchedulerName = backup.Spec.PodSpec.SchedulerName
+		podSpec.Tolerations = backup.Spec.PodSpec.Tolerations
+		podSpec.PriorityClassName = backup.Spec.PodSpec.PriorityClassName
+		podSpec.Priority = backup.Spec.PodSpec.Priority
+		podSpec.SecurityContext = backup.Spec.PodSpec.SecurityContext
+		podSpec.ImagePullSecrets = backup.Spec.PodSpec.ImagePullSecrets
 	}
 	if backup.Spec.Backend.Local != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
@@ -284,11 +289,17 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 			VolumeSource: backup.Spec.Backend.Local.VolumeSource,
 		})
 	}
+	if utils.IsClusterScoped() {
+		if job.Annotations == nil {
+			job.Annotations = make(map[string]string)
+		}
+		job.Annotations[utils.AnnotationScope] = utils.AnnotationClusterScoped
+	}
 
 	return job, nil
 }
 
-func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster) ([]corev1.Container, error) {
+func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) ([]corev1.Container, error) {
 	backupSpec := backup.Spec.Backend
 	bucket, err := backupSpec.Container()
 	if err != nil {
@@ -312,6 +323,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				)
 				return nil, err
 			}
+			reqLogger.V(3).Info("backup", "folderName", folderName)
 			container := corev1.Container{
 				Name:            fmt.Sprintf("%s-%d", redisv1alpha1.JobTypeBackup, i),
 				Image:           backup.Spec.Image,
@@ -320,16 +332,11 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 					redisv1alpha1.JobTypeBackup,
 					fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
 					fmt.Sprintf(`--bucket=%s`, bucket),
-					fmt.Sprintf(`--enable-analytics=%v`, "false"),
 					fmt.Sprintf(`--host=%s`, node.IP),
 					fmt.Sprintf(`--folder=%s`, folderName),
 					fmt.Sprintf(`--snapshot=%s-%d`, backup.Name, i),
 					"--",
 				},
-				Resources:      backup.Spec.PodSpec.Resources,
-				LivenessProbe:  backup.Spec.PodSpec.LivenessProbe,
-				ReadinessProbe: backup.Spec.PodSpec.ReadinessProbe,
-				Lifecycle:      backup.Spec.PodSpec.Lifecycle,
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      redisv1alpha1.UtilVolumeName,
@@ -351,6 +358,12 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 					MountPath: backup.Spec.Backend.Local.MountPath,
 					SubPath:   backup.Spec.Backend.Local.SubPath,
 				})
+			}
+			if backup.Spec.PodSpec != nil {
+				container.Resources = backup.Spec.PodSpec.Resources
+				container.LivenessProbe = backup.Spec.PodSpec.LivenessProbe
+				container.ReadinessProbe = backup.Spec.PodSpec.ReadinessProbe
+				container.Lifecycle = backup.Spec.PodSpec.Lifecycle
 			}
 			containers[i] = container
 			i++
@@ -440,9 +453,19 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 	if err != nil {
 		// TODO: Sometimes the job is created successfully, but it cannot be obtained immediately.
 		if errors.IsNotFound(err) {
-			msg := "One Backup is already Running"
+			msg := "One Backup is already Running, Job not found"
 			reqLogger.Info(msg, "err", err)
 			r.markAsIgnoredBackup(backup, msg)
+			delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+			if err := r.crController.UpdateCR(backup); err != nil {
+				r.recorder.Event(
+					backup,
+					corev1.EventTypeWarning,
+					event.BackupError,
+					err.Error(),
+				)
+				return err
+			}
 			r.recorder.Event(
 				backup,
 				corev1.EventTypeWarning,
@@ -535,6 +558,16 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 				msg := "One Backup is already Running"
 				reqLogger.Info(msg, o.Name, backup.Name)
 				r.markAsIgnoredBackup(backup, msg)
+				delete(backup.GetLabels(), redisv1alpha1.LabelBackupStatus)
+				if err := r.crController.UpdateCR(backup); err != nil {
+					r.recorder.Event(
+						backup,
+						corev1.EventTypeWarning,
+						event.BackupError,
+						err.Error(),
+					)
+					return err
+				}
 				r.recorder.Event(
 					backup,
 					corev1.EventTypeWarning,
@@ -542,6 +575,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 					msg,
 				)
 			}
+			break
 		}
 	}
 

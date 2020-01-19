@@ -2,7 +2,10 @@ package distributedrediscluster
 
 import (
 	"context"
+	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,12 +24,28 @@ import (
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
-	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
-var log = logf.Log.WithName("controller_distributedrediscluster")
+var (
+	log = logf.Log.WithName("controller_distributedrediscluster")
 
-const maxConcurrentReconciles = 2
+	controllerFlagSet *pflag.FlagSet
+	// maxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run. Defaults to 4.
+	maxConcurrentReconciles int
+	// reconcileTime is the delay between reconciliations. Defaults to 60s.
+	reconcileTime int
+)
+
+func init() {
+	controllerFlagSet = pflag.NewFlagSet("controller", pflag.ExitOnError)
+	controllerFlagSet.IntVar(&maxConcurrentReconciles, "ctr-maxconcurrent", 4, "the maximum number of concurrent Reconciles which can be run. Defaults to 4.")
+	controllerFlagSet.IntVar(&reconcileTime, "ctr-reconciletime", 60, "")
+}
+
+func FlagSet() *pflag.FlagSet {
+	return controllerFlagSet
+}
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -43,6 +62,9 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler := &ReconcileDistributedRedisCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
+	reconiler.serviceController = k8sutil.NewServiceController(reconiler.client)
+	reconiler.pdbController = k8sutil.NewPodDisruptionBudgetController(reconiler.client)
+	reconiler.pvcController = k8sutil.NewPvcController(reconiler.client)
 	reconiler.crController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
@@ -62,20 +84,33 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.MetaNew) {
+				return false
+			}
 			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
 			// Ignore updates to CR status in which case metadata.Generation does not change
 			if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
-				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true")
+				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).Info("Generation change return true",
+					"old", e.ObjectOld, "new", e.ObjectNew)
 				return true
 			}
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
 			// Evaluates to false if the object has been confirmed deleted.
 			return !e.DeleteStateUnknown
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
+			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
+			if !utils.ShoudManage(e.Meta) {
+				return false
+			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
 			return true
 		},
@@ -102,6 +137,9 @@ type ReconcileDistributedRedisCluster struct {
 	ensurer               clustermanger.IEnsureResource
 	checker               clustermanger.ICheck
 	statefulSetController k8sutil.IStatefulSetControl
+	serviceController     k8sutil.IServiceControl
+	pdbController         k8sutil.IPodDisruptionBudgetControl
+	pvcController         k8sutil.IPvcControl
 	crController          k8sutil.ICustomResource
 }
 
@@ -139,11 +177,12 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		reqLogger.WithValues("err", err).Info("ensureCluster")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	redisClusterPods, err := r.statefulSetController.GetStatefulSetPods(instance.Namespace, statefulsets.ClusterStatefulSetName(instance.Name))
+	matchLabels := getLabels(instance)
+	redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(instance.Namespace, matchLabels)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "GetStatefulSetPods")
 	}
@@ -165,7 +204,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		reqLogger.WithValues("err", err).Info("waitPodReady")
 		new := instance.Status.DeepCopy()
 		SetClusterScaling(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
@@ -174,7 +213,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}
 
-	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf())
+	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf(), reqLogger)
 	if err != nil {
 		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
 	}
@@ -206,35 +245,45 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		}
 		new := instance.Status.DeepCopy()
 		SetClusterFailed(new, err.Error())
-		r.updateClusterIfNeed(instance, new)
+		r.updateClusterIfNeed(instance, new, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// update cr and wait for the next Reconcile loop
-	if instance.Spec.Init != nil && instance.Status.RestoreSucceeded <= 0 {
+	if instance.IsRestoreFromBackup() && !instance.IsRestored() {
 		reqLogger.Info("update restore redis cluster cr")
-		instance.Status.RestoreSucceeded = 1
+		instance.Status.Restore.RestoreSucceeded = 1
 		if err := r.crController.UpdateCRStatus(instance); err != nil {
 			return reconcile.Result{}, err
 		}
+		// set ClusterReplicas = Backup.Status.ClusterReplicas,
+		// next Reconcile loop the statefulSet's replicas will increase by ClusterReplicas, then start the slave node
+		instance.Spec.ClusterReplicas = instance.Status.Restore.Backup.Status.ClusterReplicas
 		if err := r.crController.UpdateCR(instance); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil
 	}
 
-	status := buildClusterStatus(clusterInfos, redisClusterPods.Items, &instance.Status)
+	if err := admin.SetConfigIfNeed(instance.Spec.Config); err != nil {
+		return reconcile.Result{}, Redis.Wrap(err, "SetConfigIfNeed")
+	}
+
+	status := buildClusterStatus(clusterInfos, ctx.pods, instance, reqLogger)
+	if is := r.isScalingDown(instance, reqLogger); is {
+		SetClusterRebalancing(status, "scaling down")
+	}
 	reqLogger.V(4).Info("buildClusterStatus", "status", status)
-	r.updateClusterIfNeed(instance, status)
+	r.updateClusterIfNeed(instance, status, reqLogger)
 
 	instance.Status = *status
 	if needClusterOperation(instance, reqLogger) {
 		reqLogger.Info(">>>>>> clustering")
-		err = r.sync(ctx)
+		err = r.syncCluster(ctx)
 		if err != nil {
 			new := instance.Status.DeepCopy()
 			SetClusterFailed(new, err.Error())
-			r.updateClusterIfNeed(instance, new)
+			r.updateClusterIfNeed(instance, new, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -245,8 +294,20 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
 		}
 	}
-	newStatus := buildClusterStatus(newClusterInfos, redisClusterPods.Items, &instance.Status)
+	newStatus := buildClusterStatus(newClusterInfos, ctx.pods, instance, reqLogger)
 	SetClusterOK(newStatus, "OK")
-	r.updateClusterIfNeed(instance, newStatus)
-	return reconcile.Result{RequeueAfter: requeueEnsure}, nil
+	r.updateClusterIfNeed(instance, newStatus, reqLogger)
+	return reconcile.Result{RequeueAfter: time.Duration(reconcileTime) * time.Second}, nil
+}
+
+func (r *ReconcileDistributedRedisCluster) isScalingDown(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
+	stsList, err := r.statefulSetController.ListStatefulSetByLabels(cluster.Namespace, getLabels(cluster))
+	if err != nil {
+		reqLogger.Error(err, "ListStatefulSetByLabels")
+		return false
+	}
+	if len(stsList.Items) > int(cluster.Spec.MasterSize) {
+		return true
+	}
+	return false
 }

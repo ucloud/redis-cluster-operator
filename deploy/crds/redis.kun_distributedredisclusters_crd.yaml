@@ -61,7 +61,7 @@ spec:
               format: int32
               type: integer
               minimum: 3
-              maximum: 100
+              maximum: 10
             clusterReplicas:
               format: int32
               type: integer
@@ -81,5 +81,3 @@ spec:
   - name: v1alpha1
     served: true
     storage: true
-    subresources:
-      status: {}

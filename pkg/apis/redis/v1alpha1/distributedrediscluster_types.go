@@ -28,7 +28,7 @@ type DistributedRedisClusterSpec struct {
 	Annotations     map[string]string            `json:"annotations,omitempty"`
 	Storage         *RedisStorage                `json:"storage,omitempty"`
 	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
-	PasswordSecret  *corev1.LocalObjectReference `json:"rootPasswordSecret,omitempty"`
+	PasswordSecret  *corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
 	Monitor         *AgentSpec                   `json:"monitor,omitempty"`
 	Init            *InitSpec                    `json:"init,omitempty"`
 }
@@ -109,22 +109,30 @@ type DistributedRedisClusterStatus struct {
 	NumberOfMaster       int32              `json:"numberOfMaster,omitempty"`
 	MinReplicationFactor int32              `json:"minReplicationFactor,omitempty"`
 	MaxReplicationFactor int32              `json:"maxReplicationFactor,omitempty"`
+	NodesPlacement       NodesPlacementInfo `json:"nodesPlacementInfo,omitempty"`
 	Nodes                []RedisClusterNode `json:"nodes"`
-	// The number of restore which reached phase Succeeded.
 	// +optional
-	RestoreSucceeded int32 `json:"restoreSucceeded,omitempty"`
+	Restore Restore `json:"restore"`
+}
+
+type Restore struct {
+	// The number of restore which reached phase Succeeded.
+	RestoreSucceeded int32               `json:"restoreSucceeded,omitempty"`
+	Backup           *RedisClusterBackup `json:"backup, omitempty"`
+	//BackupSourceSpec `json:",inline"`
 }
 
 // RedisClusterNode represent a RedisCluster Node
 type RedisClusterNode struct {
-	ID        string    `json:"id"`
-	Role      RedisRole `json:"role"`
-	IP        string    `json:"ip"`
-	Port      string    `json:"port"`
-	Slots     []string  `json:"slots,omitempty"`
-	MasterRef string    `json:"masterRef,omitempty"`
-	PodName   string    `json:"podName"`
-	NodeName  string    `json:"nodeName"`
+	ID          string    `json:"id"`
+	Role        RedisRole `json:"role"`
+	IP          string    `json:"ip"`
+	Port        string    `json:"port"`
+	Slots       []string  `json:"slots,omitempty"`
+	MasterRef   string    `json:"masterRef,omitempty"`
+	PodName     string    `json:"podName"`
+	NodeName    string    `json:"nodeName"`
+	StatefulSet string    `json:"statefulSet"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

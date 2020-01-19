@@ -16,6 +16,7 @@ type IPodDisruptionBudgetControl interface {
 	UpdatePodDisruptionBudget(*policyv1beta1.PodDisruptionBudget) error
 	// DeletePodDisruptionBudget deletes a PodDisruptionBudget in a DistributedRedisCluster.
 	DeletePodDisruptionBudget(*policyv1beta1.PodDisruptionBudget) error
+	DeletePodDisruptionBudgetByName(namespace, name string) error
 	// GetPodDisruptionBudget get PodDisruptionBudget in a DistributedRedisCluster.
 	GetPodDisruptionBudget(namespace, name string) (*policyv1beta1.PodDisruptionBudget, error)
 }
@@ -43,6 +44,14 @@ func (s *PodDisruptionBudgetController) UpdatePodDisruptionBudget(pb *policyv1be
 // DeletePodDisruptionBudget implement the IPodDisruptionBudgetControl.Interface.
 func (s *PodDisruptionBudgetController) DeletePodDisruptionBudget(pb *policyv1beta1.PodDisruptionBudget) error {
 	return s.client.Delete(context.TODO(), pb)
+}
+
+func (s *PodDisruptionBudgetController) DeletePodDisruptionBudgetByName(namespace, name string) error {
+	pdb, err := s.GetPodDisruptionBudget(namespace, name)
+	if err != nil {
+		return err
+	}
+	return s.DeletePodDisruptionBudget(pdb)
 }
 
 // GetPodDisruptionBudget implement the IPodDisruptionBudgetControl.Interface.

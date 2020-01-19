@@ -183,7 +183,7 @@ func schema_pkg_apis_redis_v1alpha1_DistributedRedisClusterSpec(ref common.Refer
 							Ref: ref("k8s.io/api/core/v1.ResourceRequirements"),
 						},
 					},
-					"rootPasswordSecret": {
+					"passwordSecret": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("k8s.io/api/core/v1.LocalObjectReference"),
 						},

@@ -8,34 +8,8 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
-func AllocSlots(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) error {
-	mastersNum := len(newMasterNodes)
-	clusterHashSlots := int(admin.GetHashMaxSlot() + 1)
-	slotsPerNode := float64(clusterHashSlots) / float64(mastersNum)
-	first := 0
-	cursor := 0.0
-	for index, node := range newMasterNodes {
-		last := utils.Round(cursor + slotsPerNode - 1)
-		if last > clusterHashSlots || index == mastersNum-1 {
-			last = clusterHashSlots - 1
-		}
-
-		if last < first {
-			last = first
-		}
-
-		node.Slots = redisutil.BuildSlotSlice(redisutil.Slot(first), redisutil.Slot(last))
-		first = last + 1
-		cursor += slotsPerNode
-		if err := admin.AddSlots(node.IPPort(), node.Slots); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RebalancedCluster rebalanced a redis cluster.
-func RebalancedCluster(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) error {
+func (c *Ctx) RebalancedCluster(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) error {
 	nbNode := len(newMasterNodes)
 	for _, node := range newMasterNodes {
 		expected := int(float64(admin.GetHashMaxSlot()+1) / float64(nbNode))
@@ -89,7 +63,7 @@ func RebalancedCluster(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) e
 				log.Error(nil, "*** Assertion failed: Reshard table != number of slots", "table", len(reshardTable), "slots", numSlots)
 			}
 			for _, e := range reshardTable {
-				if err := moveSlot(e, dst, admin); err != nil {
+				if err := c.moveSlot(e, dst, admin); err != nil {
 					return err
 				}
 			}
@@ -149,7 +123,7 @@ func computeReshardTable(src redisutil.Nodes, numSlots int) []*MovedNode {
 	return moved
 }
 
-func moveSlot(source *MovedNode, target *redisutil.Node, admin redisutil.IAdmin) error {
+func (c *Ctx) moveSlot(source *MovedNode, target *redisutil.Node, admin redisutil.IAdmin) error {
 	if err := admin.SetSlot(target.IPPort(), "IMPORTING", source.Slot, target.ID); err != nil {
 		return err
 	}
@@ -160,11 +134,37 @@ func moveSlot(source *MovedNode, target *redisutil.Node, admin redisutil.IAdmin)
 		return err
 	}
 	if err := admin.SetSlot(target.IPPort(), "NODE", source.Slot, target.ID); err != nil {
-		log.Error(err, "SET NODE", "node", target.IPPort())
+		c.log.Error(err, "SET NODE", "node", target.IPPort())
 	}
 	if err := admin.SetSlot(source.Source.IPPort(), "NODE", source.Slot, target.ID); err != nil {
-		log.Error(err, "SET NODE", "node", source.Source.IPPort())
+		c.log.Error(err, "SET NODE", "node", source.Source.IPPort())
 	}
 	source.Source.Slots = redisutil.RemoveSlot(source.Source.Slots, source.Slot)
+	return nil
+}
+
+func (c *Ctx) AllocSlots(admin redisutil.IAdmin, newMasterNodes redisutil.Nodes) error {
+	mastersNum := len(newMasterNodes)
+	clusterHashSlots := int(admin.GetHashMaxSlot() + 1)
+	slotsPerNode := float64(clusterHashSlots) / float64(mastersNum)
+	first := 0
+	cursor := 0.0
+	for index, node := range newMasterNodes {
+		last := utils.Round(cursor + slotsPerNode - 1)
+		if last > clusterHashSlots || index == mastersNum-1 {
+			last = clusterHashSlots - 1
+		}
+
+		if last < first {
+			last = first
+		}
+
+		node.Slots = redisutil.BuildSlotSlice(redisutil.Slot(first), redisutil.Slot(last))
+		first = last + 1
+		cursor += slotsPerNode
+		if err := admin.AddSlots(node.IPPort(), node.Slots); err != nil {
+			return err
+		}
+	}
 	return nil
 }

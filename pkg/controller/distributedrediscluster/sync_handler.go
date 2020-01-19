@@ -12,11 +12,11 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 )
 
 const (
-	requeueAfter  = 10 * time.Second
-	requeueEnsure = 60 * time.Second
+	requeueAfter = 10 * time.Second
 )
 
 type syncContext struct {
@@ -30,31 +30,41 @@ type syncContext struct {
 
 func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error {
 	cluster := ctx.cluster
-	if err := r.validate(cluster); err != nil {
+	if err := r.validate(cluster, ctx.reqLogger); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "Validate")
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}
 	labels := getLabels(cluster)
-	var backup *redisv1alpha1.RedisClusterBackup
-	var err error
-	if cluster.Spec.Init != nil {
-		backup, err = r.crController.GetRedisClusterBackup(cluster.Spec.Init.BackupSource.Namespace, cluster.Spec.Init.BackupSource.Name)
-		if err != nil {
-			return err
-		}
-	}
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
-	if err := r.ensurer.EnsureRedisStatefulset(cluster, backup, labels); err != nil {
-		return Kubernetes.Wrap(err, "EnsureRedisStatefulset")
+	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, labels); err != nil {
+		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
+		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
+	} else if updated {
+		// update cluster status = RollingUpdate immediately when cluster's image or resource or password changed
+		SetClusterUpdating(&cluster.Status, "cluster spec updated")
+		r.crController.UpdateCRStatus(cluster)
+		waiter := &waitStatefulSetUpdating{
+			name:                  "waitStatefulSetUpdating",
+			timeout:               30 * time.Second * time.Duration(cluster.Spec.ClusterReplicas+2),
+			tick:                  5 * time.Second,
+			statefulSetController: r.statefulSetController,
+			cluster:               cluster,
+		}
+		if err := waiting(waiter, ctx.reqLogger); err != nil {
+			return err
+		}
 	}
-	if err := r.ensurer.EnsureRedisHeadLessSvc(cluster, labels); err != nil {
-		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvc")
+	if err := r.ensurer.EnsureRedisHeadLessSvcs(cluster, labels); err != nil {
+		return Kubernetes.Wrap(err, "EnsureRedisHeadLessSvcs")
 	}
-	if err := r.ensurer.EnsureRedisOSMSecret(cluster, backup, labels); err != nil {
+	if err := r.ensurer.EnsureRedisSvc(cluster, labels); err != nil {
+		return Kubernetes.Wrap(err, "EnsureRedisSvc")
+	}
+	if err := r.ensurer.EnsureRedisOSMSecret(cluster, labels); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
 		}
@@ -74,39 +84,53 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error 
 	return nil
 }
 
-func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	initSpec := cluster.Spec.Init
-	if initSpec != nil {
-		if initSpec.BackupSource == nil {
-			return fmt.Errorf("backupSource is required")
-		}
-		backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
+func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
+	var update bool
+	var err error
+
+	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
+		update, err = r.validateRestore(cluster, reqLogger)
 		if err != nil {
 			return err
 		}
-		if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
-			return fmt.Errorf("backup is still running")
-		}
-		if cluster.Spec.Image == "" {
-			cluster.Spec.Image = backup.Status.ClusterImage
-		}
-		cluster.Spec.MasterSize = backup.Status.MasterSize
-		if cluster.Status.RestoreSucceeded <= 0 {
-			cluster.Spec.ClusterReplicas = 0
-		} else {
-			cluster.Spec.ClusterReplicas = backup.Status.ClusterReplicas
-		}
 	}
-	cluster.Validate()
+	updateDefault := cluster.DefaultSpec(reqLogger)
+	if update || updateDefault {
+		return r.crController.UpdateCR(cluster)
+	}
 	return nil
 }
 
+func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) (bool, error) {
+	update := false
+	if cluster.Status.Restore.Backup == nil {
+		initSpec := cluster.Spec.Init
+		backup, err := r.crController.GetRedisClusterBackup(initSpec.BackupSource.Namespace, initSpec.BackupSource.Name)
+		if err != nil {
+			reqLogger.Error(err, "GetRedisClusterBackup")
+			return update, err
+		}
+		if backup.Status.Phase != redisv1alpha1.BackupPhaseSucceeded {
+			reqLogger.Error(nil, "backup is still running")
+			return update, fmt.Errorf("backup is still running")
+		}
+		cluster.Status.Restore.Backup = backup
+	}
+	backup := cluster.Status.Restore.Backup
+	if cluster.Spec.Image == "" {
+		cluster.Spec.Image = backup.Status.ClusterImage
+		update = true
+	}
+	if cluster.Spec.MasterSize != backup.Status.MasterSize {
+		cluster.Spec.MasterSize = backup.Status.MasterSize
+		update = true
+	}
+	// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
+	cluster.Spec.ClusterReplicas = 0
+	return update, nil
+}
+
 func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) error {
-	//logger.Info(">>> Assign a different config epoch to each node")
-	//err := admin.SetConfigEpoch()
-	//if err != nil {
-	//	return Redis.Wrap(err, "SetConfigEpoch")
-	//}
 	if infos, err := ctx.admin.GetClusterInfos(); err == nil {
 		ctx.reqLogger.V(6).Info("debug waitForClusterJoin", "cluster infos", infos)
 		return nil
@@ -133,233 +157,128 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	return nil
 }
 
-/*
-func (r *ReconcileDistributedRedisCluster) sync(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	// step 3. check if the cluster is empty, if it is empty, init the cluster
-	isEmpty, err := admin.ClusterManagerNodeIsEmpty()
-	if err != nil {
-		return Redis.Wrap(err, "ClusterManagerNodeIsEmpty")
-	}
-	if isEmpty {
-		logger.Info("cluster nodes", "info", clusterInfos.GetNodes().String())
-
-		if err := makeCluster(cluster, clusterInfos); err != nil {
-			return NoType.Wrap(err, "makeCluster")
-		}
-		var firstNode *redisutil.Node
-		for _, nodeInfo := range clusterInfos.Infos {
-			if len(nodeInfo.Node.MasterReferent) == 0 {
-				if firstNode == nil {
-					firstNode = nodeInfo.Node
-				}
-				err = admin.AddSlots(net.JoinHostPort(nodeInfo.Node.IP, nodeInfo.Node.Port), nodeInfo.Node.Slots)
-				if err != nil {
-					return Redis.Wrap(err, "AddSlots")
-				}
-			}
-		}
-		logger.Info(">>> Nodes configuration updated")
-		logger.Info(">>> Assign a different config epoch to each node")
-		err = admin.SetConfigEpoch()
-		if err != nil {
-			return Redis.Wrap(err, "SetConfigEpoch")
-		}
-		logger.Info(">>> Sending CLUSTER MEET messages to join the cluster")
-		err = admin.AttachNodeToCluster(firstNode.IPPort())
-		if err != nil {
-			return Redis.Wrap(err, "AttachNodeToCluster")
-		}
-
-		time.Sleep(1 * time.Second)
-		for {
-			_, err = admin.GetClusterInfos()
-			if err == nil {
-				break
-			}
-			logger.Info("wait custer consistent")
-			time.Sleep(1 * time.Second)
-		}
-
-		for _, nodeInfo := range clusterInfos.Infos {
-			if len(nodeInfo.Node.MasterReferent) != 0 {
-				err = admin.AttachSlaveToMaster(nodeInfo.Node, nodeInfo.Node.MasterReferent)
-				if err != nil {
-					return Redis.Wrap(err, "AttachSlaveToMaster")
-				}
-			}
-		}
-	}
-
-	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	return nil
-}*/
-
-/*
-func (r *ReconcileDistributedRedisCluster) syncCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos, admin redisutil.IAdmin) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	cNbMaster := cluster.Spec.MasterSize
-	cReplicaFactor := cluster.Spec.ClusterReplicas
-	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
-	if err != nil {
-		return Cluster.Wrap(err, "newRedisCluster")
-	}
-
-	// First, we define the new masters
-	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
-	if err != nil {
-		return Cluster.Wrap(err, "DispatchMasters")
-	}
-	logger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
-
-	// Second select Node that is already a slave
-	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
-
-	// New slaves are slaves which is currently a master with no slots
-	newSlave := nodes.FilterByFunc(func(nodeA *redisutil.Node) bool {
-		for _, nodeB := range newMasters {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		for _, nodeB := range currentSlaveNodes {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		return true
-	})
-
-	// Depending on whether we scale up or down, we will dispatch slaves before/after the dispatch of slots
-	if cNbMaster < int32(len(curMasters)) {
-		logger.Info("current masters > specification", "curMasters", curMasters, "masterSize", cNbMaster)
-		// this happens usually after a scale down of the cluster
-		// we should dispatch slots before dispatching slaves
-		if err := clustering.DispatchSlotToNewMasters(rCluster, admin, newMasters, curMasters, allMaster); err != nil {
-			return Cluster.Wrap(err, "DispatchSlotToNewMasters")
-		}
-
-		// assign master/slave roles
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-	} else {
-		logger.Info("current masters < specification", "curMasters", curMasters, "masterSize", cNbMaster)
-		// We are scaling up the nbmaster or the nbmaster doesn't change.
-		// assign master/slave roles
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
-
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
-			return Cluster.Wrap(err, "AttachingSlavesToMaster")
-		}
-
-		if err := clustering.DispatchSlotToNewMasters(rCluster, admin, newMasters, curMasters, allMaster); err != nil {
-			return Cluster.Wrap(err, "DispatchSlotToNewMasters")
-		}
-	}
-
-	if err = admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	return nil
-}*/
-
-func (r *ReconcileDistributedRedisCluster) sync(ctx *syncContext) error {
+func (r *ReconcileDistributedRedisCluster) syncCluster(ctx *syncContext) error {
 	cluster := ctx.cluster
 	admin := ctx.admin
 	clusterInfos := ctx.clusterInfos
-	if err := admin.SetConfigIfNeed(cluster.Spec.Config); err != nil {
-		return Redis.Wrap(err, "SetConfigIfNeed")
-	}
-
-	cNbMaster := cluster.Spec.MasterSize
-	cReplicaFactor := cluster.Spec.ClusterReplicas
+	expectMasterNum := cluster.Spec.MasterSize
 	rCluster, nodes, err := newRedisCluster(clusterInfos, cluster)
 	if err != nil {
 		return Cluster.Wrap(err, "newRedisCluster")
 	}
-
-	//currentMasterNodes := nodes.FilterByFunc(redisutil.IsMasterWithSlot)
-	//if len(currentMasterNodes) == int(cluster.Spec.MasterSize) {
-	//	logger.V(3).Info("cluster ok")
-	//	return nil
-	//}
-
-	// First, we define the new masters
-	newMasters, curMasters, allMaster, err := clustering.DispatchMasters(rCluster, nodes, cNbMaster)
-	if err != nil {
+	clusterCtx := clustering.NewCtx(rCluster, nodes, cluster.Spec.MasterSize, cluster.Name, ctx.reqLogger)
+	if err := clusterCtx.DispatchMasters(); err != nil {
 		return Cluster.Wrap(err, "DispatchMasters")
 	}
-	ctx.reqLogger.V(4).Info("DispatchMasters Info", "newMasters", newMasters, "curMasters", curMasters, "allMaster", allMaster)
-
-	// Second select Node that is already a slave
-	currentSlaveNodes := nodes.FilterByFunc(redisutil.IsSlave)
-
-	// New slaves are slaves which is currently a master with no slots
-	newSlave := nodes.FilterByFunc(func(nodeA *redisutil.Node) bool {
-		for _, nodeB := range newMasters {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		for _, nodeB := range currentSlaveNodes {
-			if nodeA.ID == nodeB.ID {
-				return false
-			}
-		}
-		return true
-	})
-
-	if 0 == len(curMasters) {
+	curMasters := clusterCtx.GetCurrentMasters()
+	newMasters := clusterCtx.GetNewMasters()
+	ctx.reqLogger.Info("masters", "newMasters", len(newMasters), "curMasters", len(curMasters))
+	if len(curMasters) == 0 {
 		ctx.reqLogger.Info("Creating cluster")
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
 
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		}
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 
-		if err := clustering.AllocSlots(admin, newMasters); err != nil {
+		if err := clusterCtx.AllocSlots(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "AllocSlots")
 		}
 	} else if len(newMasters) > len(curMasters) {
-		ctx.reqLogger.Info("Scaling cluster")
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
+		ctx.reqLogger.Info("Scaling up")
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
 
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		}
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
 
-		if err := clustering.RebalancedCluster(admin, newMasters); err != nil {
+		if err := clusterCtx.RebalancedCluster(admin, newMasters); err != nil {
 			return Cluster.Wrap(err, "RebalancedCluster")
 		}
 	} else if cluster.Status.MinReplicationFactor < cluster.Spec.ClusterReplicas {
-		newRedisSlavesByMaster, bestEffort := clustering.PlaceSlaves(rCluster, newMasters, currentSlaveNodes, newSlave, cReplicaFactor)
-		if bestEffort {
-			rCluster.NodesPlacement = redisv1alpha1.NodesPlacementInfoBestEffort
-		}
+		ctx.reqLogger.Info("Scaling slave")
+		if err := clusterCtx.PlaceSlaves(); err != nil {
+			return Cluster.Wrap(err, "PlaceSlaves")
 
-		if err := clustering.AttachingSlavesToMaster(rCluster, admin, newRedisSlavesByMaster); err != nil {
+		}
+		if err := clusterCtx.AttachingSlavesToMaster(admin); err != nil {
 			return Cluster.Wrap(err, "AttachingSlavesToMaster")
 		}
+	} else if len(curMasters) > int(expectMasterNum) {
+		ctx.reqLogger.Info("Scaling down")
+		var allMaster redisutil.Nodes
+		allMaster = append(allMaster, newMasters...)
+		allMaster = append(allMaster, curMasters...)
+		if err := clusterCtx.DispatchSlotToNewMasters(admin, newMasters, curMasters, allMaster); err != nil {
+			return err
+		}
+		if err := r.scalingDown(ctx, len(curMasters), clusterCtx.GetStatefulsetNodes()); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
+func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, currentMasterNum int, statefulSetNodes map[string]redisutil.Nodes) error {
+	cluster := ctx.cluster
+	SetClusterRebalancing(&cluster.Status,
+		fmt.Sprintf("scale down, currentMasterSize: %d, expectMasterSize %d", currentMasterNum, cluster.Spec.MasterSize))
+	r.crController.UpdateCRStatus(cluster)
+	admin := ctx.admin
+	expectMasterNum := int(cluster.Spec.MasterSize)
+	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
+		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		for _, node := range statefulSetNodes[stsName] {
+			admin.Connections().Remove(node.IPPort())
+		}
+	}
+	for i := currentMasterNum - 1; i >= expectMasterNum; i-- {
+		stsName := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		ctx.reqLogger.Info("scaling down", "statefulSet", stsName)
+		sts, err := r.statefulSetController.GetStatefulSet(cluster.Namespace, stsName)
+		if err != nil {
+			return Kubernetes.Wrap(err, "GetStatefulSet")
+		}
+		for _, node := range statefulSetNodes[stsName] {
+			ctx.reqLogger.Info("forgetNode", "id", node.ID, "ip", node.IP, "role", node.GetRole())
+			if len(node.Slots) > 0 {
+				return Redis.New(fmt.Sprintf("node %s is not empty! Reshard data away and try again", node.String()))
+			}
+			if err := admin.ForgetNode(node.ID); err != nil {
+				return Redis.Wrap(err, "ForgetNode")
+			}
+		}
+		// remove resource
+		if err := r.statefulSetController.DeleteStatefulSetByName(cluster.Namespace, stsName); err != nil {
+			ctx.reqLogger.Error(err, "DeleteStatefulSetByName", "statefulSet", stsName)
+		}
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Name, i)
+		if err := r.serviceController.DeleteServiceByName(cluster.Namespace, svcName); err != nil {
+			ctx.reqLogger.Error(err, "DeleteServiceByName", "service", svcName)
+		}
+		if err := r.pdbController.DeletePodDisruptionBudgetByName(cluster.Namespace, stsName); err != nil {
+			ctx.reqLogger.Error(err, "DeletePodDisruptionBudgetByName", "pdb", stsName)
+		}
+		if err := r.pvcController.DeletePvcByLabels(cluster.Namespace, sts.Labels); err != nil {
+			ctx.reqLogger.Error(err, "DeletePvcByLabels", "labels", sts.Labels)
+		}
+		// wait pod Terminating
+		waiter := &waitPodTerminating{
+			name:                  "waitPodTerminating",
+			statefulSet:           stsName,
+			timeout:               30 * time.Second * time.Duration(cluster.Spec.ClusterReplicas+2),
+			tick:                  5 * time.Second,
+			statefulSetController: r.statefulSetController,
+			cluster:               cluster,
+		}
+		if err := waiting(waiter, ctx.reqLogger); err != nil {
+			ctx.reqLogger.Error(err, "waitPodTerminating")
+		}
+
+	}
 	return nil
 }

@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: drc-validation-webhook
+webhooks:
+  - name: drc.redis.kun
+    #failurePolicy: Ignore
+    failurePolicy: Fail
+    clientConfig:
+      service:
+        name: drc-admission-webhook
+        namespace: default
+        path: /validate-redis-kun-v1alpha1-distributedrediscluster
+      caBundle: ${CA_BUNDLE}
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - redis.kun
+        apiVersions:
+          - v1alpha1
+        resources:
+          - distributedredisclusters

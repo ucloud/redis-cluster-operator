@@ -13,12 +13,11 @@ import (
 
 type ICheck interface {
 	CheckRedisNodeNum(*redisv1alpha1.DistributedRedisCluster) error
-	CheckRedisMasterNum(*redisv1alpha1.DistributedRedisCluster) error
+	//CheckRedisMasterNum(*redisv1alpha1.DistributedRedisCluster) error
 }
 
 type realCheck struct {
-	statefulSetClient  k8sutil.IStatefulSetControl
-	clusterStatefulSet *appsv1.StatefulSet
+	statefulSetClient k8sutil.IStatefulSetControl
 }
 
 func NewCheck(client client.Client) ICheck {
@@ -27,25 +26,27 @@ func NewCheck(client client.Client) ICheck {
 	}
 }
 
-func (c *realCheck) init(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, statefulsets.ClusterStatefulSetName(cluster.Name))
-	if err != nil {
-		return err
+func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisCluster) error {
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		expectNodeNum := cluster.Spec.ClusterReplicas + 1
+		ss, err := c.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
+		if err != nil {
+			return err
+		}
+		if err := c.checkRedisNodeNum(expectNodeNum, ss); err != nil {
+			return err
+		}
 	}
-	c.clusterStatefulSet = ss
+
 	return nil
 }
 
-func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	err := c.init(cluster)
-	if err != nil {
-		return err
-	}
-	expectNodeNum := cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)
-	if expectNodeNum != *c.clusterStatefulSet.Spec.Replicas {
+func (c *realCheck) checkRedisNodeNum(expectNodeNum int32, ss *appsv1.StatefulSet) error {
+	if expectNodeNum != *ss.Spec.Replicas {
 		return fmt.Errorf("number of redis pods is different from specification")
 	}
-	if expectNodeNum != c.clusterStatefulSet.Status.ReadyReplicas {
+	if expectNodeNum != ss.Status.ReadyReplicas {
 		return fmt.Errorf("redis pods are not all ready")
 	}
 
@@ -53,9 +54,6 @@ func (c *realCheck) CheckRedisNodeNum(cluster *redisv1alpha1.DistributedRedisClu
 }
 
 func (c *realCheck) CheckRedisMasterNum(cluster *redisv1alpha1.DistributedRedisCluster) error {
-	if c.clusterStatefulSet == nil {
-		c.init(cluster)
-	}
 	if cluster.Spec.MasterSize != cluster.Status.NumberOfMaster {
 		return fmt.Errorf("number of redis master different from specification")
 	}

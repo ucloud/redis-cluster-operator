@@ -19,6 +19,9 @@ spec:
           image: uhub.service.ucloud.cn/operator/redis-cluster-operator:latest
           command:
           - redis-cluster-operator
+          args:
+          - --rename-command-path=/etc/redisconf
+          - --rename-command-file=redis.conf
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
@@ -29,3 +32,24 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "redis-cluster-operator"
+          volumeMounts:
+            - name: redisconf
+              mountPath: /etc/redisconf
+      volumes:
+        - name: redisconf
+          configMap:
+            name: redis-admin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-admin
+data:
+  redis.conf: |-
+    rename-command CONFIG lni07z1p
+    rename-command BGSAVE pp14qluk
+    rename-command DEBUG 8a4insyv
+    rename-command SAVE 6on30p6z
+    rename-command SHUTDOWN dvui0opr
+    rename-command SLAVEOF xwxvcw36
+    rename-command BGREWRITEAOF www07fko

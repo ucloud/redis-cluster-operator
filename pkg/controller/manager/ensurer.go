@@ -4,6 +4,8 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -17,12 +19,11 @@ import (
 )
 
 type IEnsureResource interface {
-	EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster,
-		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
-	EnsureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) (bool, error)
+	EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
-	EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster,
-		backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error
+	EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 }
 
 type realEnsureResource struct {
@@ -47,53 +48,140 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 	}
 }
 
-func (r *realEnsureResource) EnsureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster,
-	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
-	if err := r.ensureRedisPDB(cluster, labels); err != nil {
-		return err
-	}
-
-	name := statefulsets.ClusterStatefulSetName(cluster.Name)
-	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, name)
-	if err == nil {
-		if (cluster.Spec.MasterSize * (cluster.Spec.ClusterReplicas + 1)) != *ss.Spec.Replicas {
-			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
-				Info("scaling statefulSet")
-			newSS, err := statefulsets.NewStatefulSetForCR(cluster, backup, labels)
-			if err != nil {
-				return err
-			}
-			return r.statefulSetClient.UpdateStatefulSet(newSS)
+func (r *realEnsureResource) EnsureRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) (bool, error) {
+	updated := false
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
+		// assign label
+		labels[redisv1alpha1.StatefulSetLabel] = name
+		if stsUpdated, err := r.ensureRedisStatefulset(cluster, name, svcName, labels); err != nil {
+			return false, err
+		} else if stsUpdated {
+			updated = stsUpdated
 		}
-	} else if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", name).
-			Info("creating a new statefulSet")
-		newSS, err := statefulsets.NewStatefulSetForCR(cluster, backup, labels)
-		if err != nil {
-			return err
-		}
-		return r.statefulSetClient.CreateStatefulSet(newSS)
 	}
-	return err
+	return updated, nil
 }
 
-func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.pdbClient.GetPodDisruptionBudget(cluster.Namespace, cluster.Name)
+func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
+	labels map[string]string) (bool, error) {
+	if err := r.ensureRedisPDB(cluster, ssName, labels); err != nil {
+		return false, err
+	}
+
+	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, ssName)
+	if err == nil {
+		if shouldUpdateRedis(cluster, ss) {
+			r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
+				Info("updating statefulSet")
+			newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, labels)
+			if err != nil {
+				return false, err
+			}
+			return true, r.statefulSetClient.UpdateStatefulSet(newSS)
+		}
+	} else if err != nil && errors.IsNotFound(err) {
+		r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
+			Info("creating a new statefulSet")
+		newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, labels)
+		if err != nil {
+			return false, err
+		}
+		return false, r.statefulSetClient.CreateStatefulSet(newSS)
+	}
+	return false, err
+}
+
+func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *appsv1.StatefulSet) bool {
+	if (cluster.Spec.ClusterReplicas + 1) != *sts.Spec.Replicas {
+		return true
+	}
+	if cluster.Spec.Image != sts.Spec.Template.Spec.Containers[0].Image {
+		return true
+	}
+	if cluster.Spec.PasswordSecret != nil {
+		envSet := sts.Spec.Template.Spec.Containers[0].Env
+		secretName := getSecretKeyRefByKey(redisv1alpha1.PasswordENV, envSet)
+		if secretName == "" {
+			return true
+		}
+		if secretName != cluster.Spec.PasswordSecret.Name {
+			return true
+		}
+	}
+
+	expectResource := cluster.Spec.Resources
+	currentResource := sts.Spec.Template.Spec.Containers[0].Resources
+	if result := expectResource.Requests.Memory().Cmp(*currentResource.Requests.Memory()); result != 0 {
+		return true
+	}
+	if result := expectResource.Requests.Cpu().Cmp(*currentResource.Requests.Cpu()); result != 0 {
+		return true
+	}
+	if result := expectResource.Limits.Memory().Cmp(*currentResource.Limits.Memory()); result != 0 {
+		return true
+	}
+	if result := expectResource.Limits.Cpu().Cmp(*currentResource.Limits.Cpu()); result != 0 {
+		return true
+	}
+	return false
+}
+
+func getSecretKeyRefByKey(key string, envSet []corev1.EnvVar) string {
+	for _, value := range envSet {
+		if key == value.Name {
+			if value.ValueFrom != nil && value.ValueFrom.SecretKeyRef != nil {
+				return value.ValueFrom.SecretKeyRef.Name
+			}
+		}
+	}
+	return ""
+}
+
+func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {
+	_, err := r.pdbClient.GetPodDisruptionBudget(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
-		r.logger.WithValues("PDB.Namespace", cluster.Namespace, "PDB.Name", cluster.Spec.ServiceName).
+		r.logger.WithValues("PDB.Namespace", cluster.Namespace, "PDB.Name", name).
 			Info("creating a new PodDisruptionBudget")
-		pdb := poddisruptionbudgets.NewPodDisruptionBudgetForCR(cluster, labels)
+		pdb := poddisruptionbudgets.NewPodDisruptionBudgetForCR(cluster, name, labels)
 		return r.pdbClient.CreatePodDisruptionBudget(pdb)
 	}
 	return err
 }
 
-func (r *realEnsureResource) EnsureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
-	_, err := r.svcClient.GetService(cluster.Namespace, cluster.Spec.ServiceName)
+func (r *realEnsureResource) EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
+		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		// assign label
+		labels[redisv1alpha1.StatefulSetLabel] = name
+		if err := r.ensureRedisHeadLessSvc(cluster, svcName, labels); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *realEnsureResource) ensureRedisHeadLessSvc(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {
+	_, err := r.svcClient.GetService(cluster.Namespace, name)
 	if err != nil && errors.IsNotFound(err) {
 		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
 			Info("creating a new headless service")
-		svc := services.NewHeadLessSvcForCR(cluster, labels)
+		svc := services.NewHeadLessSvcForCR(cluster, name, labels)
+		return r.svcClient.CreateService(svc)
+	}
+	return err
+}
+
+func (r *realEnsureResource) EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	name := cluster.Spec.ServiceName
+	delete(labels, redisv1alpha1.StatefulSetLabel)
+	_, err := r.svcClient.GetService(cluster.Namespace, name)
+	if err != nil && errors.IsNotFound(err) {
+		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
+			Info("creating a new service")
+		svc := services.NewSvcForCR(cluster, name, labels)
 		return r.svcClient.CreateService(svc)
 	}
 	return err
@@ -107,25 +195,27 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 			r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
 				Info("creating a new configMap")
 			cm := configmaps.NewConfigMapForCR(cluster, labels)
-			return r.configMapClient.CreateConfigMap(cm)
+			if err2 := r.configMapClient.CreateConfigMap(cm); err2 != nil {
+				return err2
+			}
+		} else {
+			return err
 		}
-		return err
-
 	}
 
-	if cluster.Spec.Init != nil {
+	if cluster.IsRestoreFromBackup() {
 		restoreCmName := configmaps.RestoreConfigMapName(cluster.Name)
 		restoreCm, err := r.configMapClient.GetConfigMap(cluster.Namespace, restoreCmName)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
+				r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", restoreCmName).
 					Info("creating a new restore configMap")
 				cm := configmaps.NewConfigMapForRestore(cluster, labels)
 				return r.configMapClient.CreateConfigMap(cm)
 			}
 			return err
 		}
-		if restoreCm.Data[configmaps.RestoreSucceeded] != strconv.Itoa(int(cluster.Status.RestoreSucceeded)) {
+		if restoreCm.Data[configmaps.RestoreSucceeded] != strconv.Itoa(int(cluster.Status.Restore.RestoreSucceeded)) {
 			cm := configmaps.NewConfigMapForRestore(cluster, labels)
 			return r.configMapClient.UpdateConfigMap(cm)
 		}
@@ -133,11 +223,11 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 	return nil
 }
 
-func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster,
-	backup *redisv1alpha1.RedisClusterBackup, labels map[string]string) error {
-	if cluster.Spec.Init == nil || cluster.Status.RestoreSucceeded > 0 {
+func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	if !cluster.IsRestoreFromBackup() || cluster.IsRestored() {
 		return nil
 	}
+	backup := cluster.Status.Restore.Backup
 	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
 	if err != nil {
 		return err

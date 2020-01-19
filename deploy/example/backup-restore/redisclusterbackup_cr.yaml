@@ -10,6 +10,9 @@ type: Opaque
 apiVersion: redis.kun/v1alpha1
 kind: RedisClusterBackup
 metadata:
+  annotations:
+    # if your operator run as cluster-scoped, add this annotations
+    redis.kun/scope: cluster-scoped
   name: example-redisclusterbackup
 spec:
   image: uhub.service.ucloud.cn/operator/redis-tools:5.0.4

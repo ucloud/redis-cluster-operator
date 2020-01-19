@@ -53,51 +53,51 @@ func DispatchMasters(cluster *redisutil.Cluster, nodes redisutil.Nodes, nbMaster
 }
 
 // DispatchSlotToNewMasters used to dispatch Slot to the new master nodes
-func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin, newMasterNodes, currentMasterNodes, allMasterNodes redisutil.Nodes) error {
+func (c *Ctx) DispatchSlotToNewMasters(admin redisutil.IAdmin, newMasterNodes, currentMasterNodes, allMasterNodes redisutil.Nodes) error {
 	// Calculate the Migration slot information (which slots goes from where to where)
-	migrationSlotInfo, info := feedMigInfo(newMasterNodes, currentMasterNodes, allMasterNodes, int(admin.GetHashMaxSlot()+1))
-	cluster.ActionsInfo = info
-	cluster.Status = redisv1alpha1.ClusterStatusRebalancing
+	migrationSlotInfo, info := c.feedMigInfo(newMasterNodes, currentMasterNodes, allMasterNodes, int(admin.GetHashMaxSlot()+1))
+	c.cluster.ActionsInfo = info
+	c.cluster.Status = redisv1alpha1.ClusterStatusRebalancing
 	for nodesInfo, slots := range migrationSlotInfo {
 		// There is a need for real error handling here, we must ensure we don't keep a slot in abnormal state
 		if nodesInfo.From == nil {
-			log.V(4).Info("1) add slots that having probably been lost during scale down", "destination:", nodesInfo.To.ID, "total:", len(slots), " : ", redisutil.SlotSlice(slots))
+			c.log.V(4).Info("1) add slots that having probably been lost during scale down", "destination:", nodesInfo.To.ID, "total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err := admin.AddSlots(nodesInfo.To.IPPort(), slots)
 			if err != nil {
-				log.Error(err, "error during ADDSLOTS")
+				c.log.Error(err, "error during ADDSLOTS")
 				return err
 			}
 		} else {
-			log.V(6).Info("1) Send SETSLOT IMPORTING command", "target:", nodesInfo.To.ID, "source-node:", nodesInfo.From.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+			c.log.V(6).Info("1) Send SETSLOT IMPORTING command", "target:", nodesInfo.To.ID, "source-node:", nodesInfo.From.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err := admin.SetSlots(nodesInfo.To.IPPort(), "IMPORTING", slots, nodesInfo.From.ID)
 			if err != nil {
-				log.Error(err, "error during IMPORTING")
+				c.log.Error(err, "error during IMPORTING")
 				return err
 			}
-			log.V(6).Info("2) Send SETSLOT MIGRATION command", "target:", nodesInfo.From.ID, "destination-node:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+			c.log.V(6).Info("2) Send SETSLOT MIGRATION command", "target:", nodesInfo.From.ID, "destination-node:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 			err = admin.SetSlots(nodesInfo.From.IPPort(), "MIGRATING", slots, nodesInfo.To.ID)
 			if err != nil {
-				log.Error(err, "error during MIGRATING")
+				c.log.Error(err, "error during MIGRATING")
 				return err
 			}
 
-			log.V(6).Info("3) Migrate Key")
+			c.log.V(6).Info("3) Migrate Key")
 			nbMigrated, migerr := admin.MigrateKeys(nodesInfo.From.IPPort(), nodesInfo.To, slots, 10, 30000, true)
 			if migerr != nil {
-				log.Error(migerr, "error during MIGRATION")
+				c.log.Error(migerr, "error during MIGRATION")
 			} else {
-				log.V(7).Info("migrated", "key", nbMigrated)
+				c.log.V(7).Info("migrated", "key", nbMigrated)
 			}
 
 			// we absolutly need to do setslot on the node owning the slot first, otherwise in case of manager crash, only the owner may think it is now owning the slot
 			// creating a cluster view discrepency
 			err = admin.SetSlots(nodesInfo.To.IPPort(), "NODE", slots, nodesInfo.To.ID)
 			if err != nil {
-				log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", nodesInfo.To.IPPort(), err))
+				c.log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", nodesInfo.To.IPPort(), err))
 			}
 			err = admin.SetSlots(nodesInfo.From.IPPort(), "NODE", slots, nodesInfo.To.ID)
 			if err != nil {
-				log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", nodesInfo.From.IPPort(), err))
+				c.log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", nodesInfo.From.IPPort(), err))
 			}
 
 			// Update bom
@@ -115,10 +115,10 @@ func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin
 					// we ignore those nodes
 					continue
 				}
-				log.V(6).Info("4) Send SETSLOT NODE command", "target:", master.ID, "new owner:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
+				c.log.V(6).Info("4) Send SETSLOT NODE command", "target:", master.ID, "new owner:", nodesInfo.To.ID, " total:", len(slots), " : ", redisutil.SlotSlice(slots))
 				err = admin.SetSlots(master.IPPort(), "NODE", slots, nodesInfo.To.ID)
 				if err != nil {
-					log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", master.IPPort(), err))
+					c.log.V(4).Info(fmt.Sprintf("warning during SETSLOT NODE on %s: %v", master.IPPort(), err))
 				}
 			}
 		}
@@ -128,9 +128,9 @@ func DispatchSlotToNewMasters(cluster *redisutil.Cluster, admin redisutil.IAdmin
 	return nil
 }
 
-func feedMigInfo(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes, nbSlots int) (mapOut mapSlotByMigInfo, info redisutil.ClusterActionsInfo) {
+func (c *Ctx) feedMigInfo(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes, nbSlots int) (mapOut mapSlotByMigInfo, info redisutil.ClusterActionsInfo) {
 	mapOut = make(mapSlotByMigInfo)
-	mapSlotToUpdate := buildSlotsByNode(newMasterNodes, oldMasterNodes, allMasterNodes, nbSlots)
+	mapSlotToUpdate := c.buildSlotsByNode(newMasterNodes, oldMasterNodes, allMasterNodes, nbSlots)
 
 	for id, slots := range mapSlotToUpdate {
 		for _, s := range slots {
@@ -146,7 +146,7 @@ func feedMigInfo(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes,
 				if redisutil.Contains(oldNode.Slots, s) {
 					newNode, err := newMasterNodes.GetNodeByID(id)
 					if err != nil {
-						log.Error(err, "unable to find node", "with id:", id)
+						c.log.Error(err, "unable to find node", "with id:", id)
 						continue
 					}
 					mapOut[migrationInfo{From: oldNode, To: newNode}] = append(mapOut[migrationInfo{From: oldNode, To: newNode}], s)
@@ -160,7 +160,7 @@ func feedMigInfo(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes,
 				// new slots added (not from an existing master). Correspond to lost slots during important scale down
 				newNode, err := newMasterNodes.GetNodeByID(id)
 				if err != nil {
-					log.Error(err, "unable to find node", "with id:", id)
+					c.log.Error(err, "unable to find node", "with id:", id)
 					continue
 				}
 				mapOut[migrationInfo{From: nil, To: newNode}] = append(mapOut[migrationInfo{From: nil, To: newNode}], s)
@@ -175,23 +175,23 @@ func feedMigInfo(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes,
 
 // buildSlotsByNode get all slots that have to be migrated with retrieveSlotToMigrateFrom and retrieveSlotToMigrateFromRemovedNodes
 // and assign those slots to node that need them
-func buildSlotsByNode(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes, nbSlots int) map[string][]redisutil.Slot {
+func (c *Ctx) buildSlotsByNode(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.Nodes, nbSlots int) map[string][]redisutil.Slot {
 	var nbNode = len(newMasterNodes)
 	if nbNode == 0 {
 		return make(map[string][]redisutil.Slot)
 	}
 	nbSlotByNode := int(math.Ceil(float64(nbSlots) / float64(nbNode)))
-	slotToMigrateByNode := retrieveSlotToMigrateFrom(oldMasterNodes, nbSlotByNode)
-	slotToMigrateByNodeFromDeleted := retrieveSlotToMigrateFromRemovedNodes(newMasterNodes, oldMasterNodes)
+	slotToMigrateByNode := c.retrieveSlotToMigrateFrom(oldMasterNodes, nbSlotByNode)
+	slotToMigrateByNodeFromDeleted := c.retrieveSlotToMigrateFromRemovedNodes(newMasterNodes, oldMasterNodes)
 	for id, slots := range slotToMigrateByNodeFromDeleted {
 		slotToMigrateByNode[id] = slots
 	}
 
-	slotToMigrateByNode[""] = retrieveLostSlots(oldMasterNodes, nbSlots)
+	slotToMigrateByNode[""] = c.retrieveLostSlots(oldMasterNodes, nbSlots)
 	if len(slotToMigrateByNode[""]) != 0 {
-		log.Error(nil, fmt.Sprintf("several slots have been lost: %v", redisutil.SlotSlice(slotToMigrateByNode[""])))
+		c.log.Error(nil, fmt.Sprintf("several slots have been lost: %v", redisutil.SlotSlice(slotToMigrateByNode[""])))
 	}
-	slotToAddByNode := buildSlotByNodeFromAvailableSlots(newMasterNodes, nbSlotByNode, slotToMigrateByNode)
+	slotToAddByNode := c.buildSlotByNodeFromAvailableSlots(newMasterNodes, nbSlotByNode, slotToMigrateByNode)
 
 	total := 0
 	for _, node := range allMasterNodes {
@@ -213,24 +213,24 @@ func buildSlotsByNode(newMasterNodes, oldMasterNodes, allMasterNodes redisutil.N
 		if _, err := newMasterNodes.GetNodesByFunc(searchByAddrFunc); err == nil {
 			expectedSlots = nbSlotByNode
 		}
-		log.Info(fmt.Sprintf("node %s will have %d + %d - %d = %d slots; expected: %d[+/-%d]", node.ID, currentSlots, addedSlots, removedSlots, currentSlots+addedSlots-removedSlots, expectedSlots, len(newMasterNodes)))
+		c.log.Info(fmt.Sprintf("node %s will have %d + %d - %d = %d slots; expected: %d[+/-%d]", node.ID, currentSlots, addedSlots, removedSlots, currentSlots+addedSlots-removedSlots, expectedSlots, len(newMasterNodes)))
 	}
-	log.Info(fmt.Sprintf("Total slots: %d - expected: %d", total, nbSlots))
+	c.log.Info(fmt.Sprintf("Total slots: %d - expected: %d", total, nbSlots))
 
 	return slotToAddByNode
 }
 
 // retrieveSlotToMigrateFrom list the number of slots that need to be migrated to reach nbSlotByNode per nodes
-func retrieveSlotToMigrateFrom(oldMasterNodes redisutil.Nodes, nbSlotByNode int) map[string][]redisutil.Slot {
+func (c *Ctx) retrieveSlotToMigrateFrom(oldMasterNodes redisutil.Nodes, nbSlotByNode int) map[string][]redisutil.Slot {
 	slotToMigrateByNode := make(map[string][]redisutil.Slot)
 	for _, node := range oldMasterNodes {
-		log.V(6).Info("--- oldMasterNode:", "ID:", node.ID)
+		c.log.V(6).Info("--- oldMasterNode:", "ID:", node.ID)
 		nbSlot := node.TotalSlots()
 		if nbSlot >= nbSlotByNode {
 			if len(node.Slots[nbSlotByNode:]) > 0 {
 				slotToMigrateByNode[node.ID] = append(slotToMigrateByNode[node.ID], node.Slots[nbSlotByNode:]...)
 			}
-			log.V(6).Info(fmt.Sprintf("--- migrating from %s, %d slots", node.ID, len(slotToMigrateByNode[node.ID])))
+			c.log.V(6).Info(fmt.Sprintf("--- migrating from %s, %d slots", node.ID, len(slotToMigrateByNode[node.ID])))
 		}
 	}
 	return slotToMigrateByNode
@@ -238,11 +238,11 @@ func retrieveSlotToMigrateFrom(oldMasterNodes redisutil.Nodes, nbSlotByNode int)
 
 // retrieveSlotToMigrateFromRemovedNodes given the list of node that will be masters with slots, and the list of nodes that were masters with slots
 // return the list of slots from previous nodes that will be moved, because this node will no longer hold slots
-func retrieveSlotToMigrateFromRemovedNodes(newMasterNodes, oldMasterNodes redisutil.Nodes) map[string][]redisutil.Slot {
+func (c *Ctx) retrieveSlotToMigrateFromRemovedNodes(newMasterNodes, oldMasterNodes redisutil.Nodes) map[string][]redisutil.Slot {
 	slotToMigrateByNode := make(map[string][]redisutil.Slot)
 	var removedNodes redisutil.Nodes
 	for _, old := range oldMasterNodes {
-		log.V(6).Info("--- oldMasterNode:", old.ID)
+		c.log.V(6).Info("--- oldMasterNode:", old.ID)
 		isPresent := false
 		for _, new := range newMasterNodes {
 			if old.ID == new.ID {
@@ -257,13 +257,13 @@ func retrieveSlotToMigrateFromRemovedNodes(newMasterNodes, oldMasterNodes redisu
 
 	for _, node := range removedNodes {
 		slotToMigrateByNode[node.ID] = node.Slots
-		log.V(6).Info(fmt.Sprintf("--- migrating from %s, %d slots", node.ID, len(slotToMigrateByNode[node.ID])))
+		c.log.V(6).Info(fmt.Sprintf("--- migrating from %s, %d slots", node.ID, len(slotToMigrateByNode[node.ID])))
 	}
 	return slotToMigrateByNode
 }
 
 // retrieveLostSlots retrieve the list of slots that are not attributed to a node
-func retrieveLostSlots(oldMasterNodes redisutil.Nodes, nbSlots int) []redisutil.Slot {
+func (c *Ctx) retrieveLostSlots(oldMasterNodes redisutil.Nodes, nbSlots int) []redisutil.Slot {
 	currentFullRange := []redisutil.Slot{}
 	for _, node := range oldMasterNodes {
 		// TODO a lot of perf improvement can be done here with better algorithm to add slot ranges
@@ -291,7 +291,7 @@ func retrieveLostSlots(oldMasterNodes redisutil.Nodes, nbSlots int) []redisutil.
 	return lostSlots
 }
 
-func buildSlotByNodeFromAvailableSlots(newMasterNodes redisutil.Nodes, nbSlotByNode int, slotToMigrateByNode map[string][]redisutil.Slot) map[string][]redisutil.Slot {
+func (c *Ctx) buildSlotByNodeFromAvailableSlots(newMasterNodes redisutil.Nodes, nbSlotByNode int, slotToMigrateByNode map[string][]redisutil.Slot) map[string][]redisutil.Slot {
 	slotToAddByNode := make(map[string][]redisutil.Slot)
 	var nbNode = len(newMasterNodes)
 	if nbNode == 0 {
@@ -313,7 +313,7 @@ func buildSlotByNodeFromAvailableSlots(newMasterNodes redisutil.Nodes, nbSlotByN
 				if idNode > (nbNode - 1) {
 					// all nodes have been filled
 					idNode--
-					log.V(7).Info(fmt.Sprintf("some available slots have not been assigned, over-filling node %s", newMasterNodes[idNode].ID))
+					c.log.V(7).Info(fmt.Sprintf("some available slots have not been assigned, over-filling node %s", newMasterNodes[idNode].ID))
 				}
 				slotOfNode[idNode] = append(slotOfNode[idNode], slot)
 				slotToAddByNode[newMasterNodes[idNode].ID] = append(slotToAddByNode[newMasterNodes[idNode].ID], slot)

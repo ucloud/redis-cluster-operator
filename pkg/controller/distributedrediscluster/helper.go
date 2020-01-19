@@ -13,6 +13,7 @@ import (
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
+	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
@@ -48,7 +49,7 @@ func getClusterPassword(client client.Client, cluster *redisv1alpha1.Distributed
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
 		redisPort := redisutil.DefaultRedisPort
@@ -61,7 +62,7 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redi
 				}
 			}
 		}
-		log.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
+		reqLogger.V(4).Info("append redis admin addr", "addr", pod.Status.PodIP, "port", redisPort)
 		nodesAddrs = append(nodesAddrs, net.JoinHostPort(pod.Status.PodIP, redisPort))
 	}
 	adminConfig := redisutil.AdminOptions{
@@ -70,55 +71,7 @@ func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis) (redi
 		Password:           password,
 	}
 
-	return redisutil.NewAdmin(nodesAddrs, &adminConfig), nil
-}
-
-func makeCluster(cluster *redisv1alpha1.DistributedRedisCluster, clusterInfos *redisutil.ClusterInfos) error {
-	logger := log.WithValues("namespace", cluster.Namespace, "name", cluster.Name)
-	mastersCount := int(cluster.Spec.MasterSize)
-	clusterReplicas := cluster.Spec.ClusterReplicas
-	expectPodNum := mastersCount * int(clusterReplicas+1)
-
-	if len(clusterInfos.Infos) != expectPodNum {
-		return fmt.Errorf("node num different from expectation")
-	}
-
-	logger.Info(fmt.Sprintf(">>> Performing hash slots allocation on %d nodes...", expectPodNum))
-
-	masterNodes := make(redisutil.Nodes, mastersCount)
-	i := 0
-	k := 0
-	slotsPerNode := redisutil.DefaultHashMaxSlots / mastersCount
-	first := 0
-	cursor := 0
-	for _, nodeInfo := range clusterInfos.Infos {
-		if i < mastersCount {
-			nodeInfo.Node.Role = redisutil.RedisMasterRole
-			last := cursor + slotsPerNode - 1
-			if last > redisutil.DefaultHashMaxSlots+1 || i == mastersCount-1 {
-				last = redisutil.DefaultHashMaxSlots
-			}
-			logger.Info(fmt.Sprintf("Master[%d] -> Slots %d - %d", i, first, last))
-			nodeInfo.Node.Slots = redisutil.BuildSlotSlice(redisutil.Slot(first), redisutil.Slot(last))
-			first = last + 1
-			cursor += slotsPerNode
-			masterNodes[i] = nodeInfo.Node
-		} else {
-			if k > mastersCount {
-				k = 0
-			}
-			logger.Info(fmt.Sprintf("Adding replica %s:%s to %s:%s", nodeInfo.Node.IP, nodeInfo.Node.Port,
-				masterNodes[k].IP, masterNodes[k].Port))
-			nodeInfo.Node.Role = redisutil.RedisSlaveRole
-			nodeInfo.Node.MasterReferent = masterNodes[k].ID
-			k++
-		}
-		i++
-	}
-
-	log.Info(clusterInfos.GetNodes().String())
-
-	return nil
+	return redisutil.NewAdmin(nodesAddrs, &adminConfig, reqLogger), nil
 }
 
 func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.DistributedRedisCluster) (*redisutil.Cluster, redisutil.Nodes, error) {
@@ -140,6 +93,7 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 		if rNode, ok := rCluster.Nodes[node.ID]; ok {
 			rNode.PodName = node.PodName
 			rNode.NodeName = node.NodeName
+			rNode.StatefulSet = node.StatefulSet
 		}
 	}
 
@@ -149,27 +103,129 @@ func newRedisCluster(infos *redisutil.ClusterInfos, cluster *redisv1alpha1.Distr
 func clusterPods(pods []corev1.Pod) []*corev1.Pod {
 	var podSlice []*corev1.Pod
 	for _, pod := range pods {
-		podPointer := pod
-		podSlice = append(podSlice, &podPointer)
+		// Only work with running pods
+		if pod.Status.Phase == corev1.PodRunning {
+			podPointer := pod
+			podSlice = append(podSlice, &podPointer)
+		}
 	}
 	return podSlice
 }
 
 func needClusterOperation(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) bool {
-	if compareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize) {
+	if utils.CompareIntValue("NumberOfMaster", &cluster.Status.NumberOfMaster, &cluster.Spec.MasterSize, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---NumberOfMaster")
 		return true
 	}
 
-	if compareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas) {
+	if utils.CompareIntValue("MinReplicationFactor", &cluster.Status.MinReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MinReplicationFactor")
 		return true
 	}
 
-	if compareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas) {
+	if utils.CompareIntValue("MaxReplicationFactor", &cluster.Status.MaxReplicationFactor, &cluster.Spec.ClusterReplicas, reqLogger) {
 		reqLogger.V(4).Info("needClusterOperation---MaxReplicationFactor")
 		return true
 	}
 
 	return false
+}
+
+type IWaitHandle interface {
+	Name() string
+	Tick() time.Duration
+	Timeout() time.Duration
+	Handler() error
+}
+
+// waiting will keep trying to handler.Handler() until either
+// we get a result from handler.Handler() or the timeout expires
+func waiting(handler IWaitHandle, reqLogger logr.Logger) error {
+	timeout := time.After(handler.Timeout())
+	tick := time.Tick(handler.Tick())
+	// Keep trying until we're timed out or got a result or got an error
+	for {
+		select {
+		// Got a timeout! fail with a timeout error
+		case <-timeout:
+			return fmt.Errorf("%s timed out", handler.Name())
+		// Got a tick, we should check on Handler()
+		case <-tick:
+			err := handler.Handler()
+			if err == nil {
+				return nil
+			}
+			reqLogger.V(4).Info(err.Error())
+		}
+	}
+}
+
+type waitPodTerminating struct {
+	name                  string
+	statefulSet           string
+	timeout               time.Duration
+	tick                  time.Duration
+	statefulSetController k8sutil.IStatefulSetControl
+	cluster               *redisv1alpha1.DistributedRedisCluster
+}
+
+func (w *waitPodTerminating) Name() string {
+	return w.name
+}
+
+func (w *waitPodTerminating) Tick() time.Duration {
+	return w.tick
+}
+
+func (w *waitPodTerminating) Timeout() time.Duration {
+	return w.timeout
+}
+
+func (w *waitPodTerminating) Handler() error {
+	labels := getLabels(w.cluster)
+	labels[redisv1alpha1.StatefulSetLabel] = w.statefulSet
+	podList, err := w.statefulSetController.GetStatefulSetPodsByLabels(w.cluster.Namespace, labels)
+	if err != nil {
+		return err
+	}
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return fmt.Errorf("[%s] pod still runing", pod.Name)
+		}
+	}
+	return nil
+}
+
+type waitStatefulSetUpdating struct {
+	name                  string
+	timeout               time.Duration
+	tick                  time.Duration
+	statefulSetController k8sutil.IStatefulSetControl
+	cluster               *redisv1alpha1.DistributedRedisCluster
+}
+
+func (w *waitStatefulSetUpdating) Name() string {
+	return w.name
+}
+
+func (w *waitStatefulSetUpdating) Tick() time.Duration {
+	return w.tick
+}
+
+func (w *waitStatefulSetUpdating) Timeout() time.Duration {
+	return w.timeout
+}
+
+func (w *waitStatefulSetUpdating) Handler() error {
+	labels := getLabels(w.cluster)
+	stsList, err := w.statefulSetController.ListStatefulSetByLabels(w.cluster.Namespace, labels)
+	if err != nil {
+		return err
+	}
+	for _, sts := range stsList.Items {
+		if sts.Status.ReadyReplicas != (w.cluster.Spec.ClusterReplicas + 1) {
+			return nil
+		}
+	}
+	return fmt.Errorf("statefulSet still not updated")
 }

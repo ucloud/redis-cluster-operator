@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 const (
@@ -52,7 +54,7 @@ func NewClusterInfos() *ClusterInfos {
 }
 
 // DecodeNodeStartTime decode from the cmd output the Redis instance info. Second argument is the node on which we are connected to request info
-func DecodeNodeStartTime(input *string) (time.Time, error) {
+func DecodeNodeStartTime(input *string, log logr.Logger) (time.Time, error) {
 	lines := strings.Split(*input, "\n")
 	for _, line := range lines {
 		values := strings.Split(line, ":")
@@ -70,7 +72,7 @@ func DecodeNodeStartTime(input *string) (time.Time, error) {
 }
 
 // DecodeNodeInfos decode from the cmd output the Redis nodes info. Second argument is the node on which we are connected to request info
-func DecodeNodeInfos(input *string, addr string) *NodeInfos {
+func DecodeNodeInfos(input *string, addr string, log logr.Logger) *NodeInfos {
 	infos := NewNodeInfos()
 	lines := strings.Split(*input, "\n")
 	for _, line := range lines {
@@ -123,10 +125,10 @@ func DecodeNodeInfos(input *string, addr string) *NodeInfos {
 
 			if strings.HasPrefix(values[2], "myself") {
 				infos.Node = node
-				log.V(7).Info("getting node info for node: ", node)
+				log.V(7).Info("getting node info for node", "node", node)
 			} else {
 				infos.Friends = append(infos.Friends, node)
-				log.V(7).Info("adding node to slice: ", node)
+				log.V(7).Info("adding node to slice", "node", node)
 			}
 		}
 	}
@@ -138,7 +140,7 @@ func DecodeNodeInfos(input *string, addr string) *NodeInfos {
 // the status ClusterInfosPartial is set while building the clusterinfos
 // if already set, do nothing
 // returns true if contistent or if another error
-func (c *ClusterInfos) ComputeStatus() bool {
+func (c *ClusterInfos) ComputeStatus(log logr.Logger) bool {
 	if c.Status != ClusterInfosUnset {
 		return false
 	}
@@ -147,7 +149,7 @@ func (c *ClusterInfos) ComputeStatus() bool {
 
 	consolidatedView := c.GetNodes().SortByFunc(LessByID)
 	consolidatedSignature := getConfigSignature(consolidatedView)
-	log.V(7).Info("consolidated view:\n ", consolidatedSignature)
+	log.V(7).Info("consolidated view", "consolidatedSignature:\n", consolidatedSignature)
 	for addr, nodeinfos := range c.Infos {
 		nodesView := append(nodeinfos.Friends, nodeinfos.Node).SortByFunc(LessByID)
 		nodeSignature := getConfigSignature(nodesView)
@@ -199,7 +201,7 @@ func getConfigSignature(nodes Nodes) ConfigSignature {
 	signature := ConfigSignature{}
 	for _, node := range nodes {
 		if node.Role == RedisMasterRole {
-			signature[node.ID] = SlotSlice(node.Slots)
+			signature[node.IPPort()] = SlotSlice(node.Slots)
 		}
 	}
 	return signature
