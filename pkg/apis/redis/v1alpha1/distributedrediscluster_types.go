@@ -95,7 +95,7 @@ type RedisStorage struct {
 	Size        resource.Quantity `json:"size"`
 	Type        StorageType       `json:"type"`
 	Class       string            `json:"class"`
-	DeleteClaim bool              `json:"deleteClaim",omitempty"`
+	DeleteClaim bool              `json:"deleteClaim,omitempty"`
 }
 
 // DistributedRedisClusterStatus defines the observed state of DistributedRedisCluster
