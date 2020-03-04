@@ -142,7 +142,8 @@ type IWaitHandle interface {
 // we get a result from handler.Handler() or the timeout expires
 func waiting(handler IWaitHandle, reqLogger logr.Logger) error {
 	timeout := time.After(handler.Timeout())
-	tick := time.Tick(handler.Tick())
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
 	// Keep trying until we're timed out or got a result or got an error
 	for {
 		select {
@@ -150,7 +151,7 @@ func waiting(handler IWaitHandle, reqLogger logr.Logger) error {
 		case <-timeout:
 			return fmt.Errorf("%s timed out", handler.Name())
 		// Got a tick, we should check on Handler()
-		case <-tick:
+		case <-tick.C:
 			err := handler.Handler()
 			if err == nil {
 				return nil
