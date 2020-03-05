@@ -80,3 +80,4 @@ vendor/*
 /main
 /Dockerfile-withvendor
 Dockerfile-TZSH
+skaffold.yaml

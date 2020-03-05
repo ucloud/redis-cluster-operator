@@ -388,12 +388,7 @@ func (a *Admin) MigrateKeys(addr string, dest *Node, slots []Slot, batch int, ti
 				break
 			}
 
-			var args []string
-			if replace {
-				args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "REPLACE", "KEYS"}, keys...)
-			} else {
-				args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "KEYS"}, keys...)
-			}
+			args := a.migrateCmdArgs(dest, timeoutStr, replace, keys)
 
 			resp = c.Cmd("MIGRATE", args)
 			if err := a.Connections().ValidateResp(resp, addr, "Unable to run command MIGRATE"); err != nil {
@@ -432,12 +427,7 @@ func (a *Admin) MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int,
 			break
 		}
 
-		var args []string
-		if replace {
-			args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "REPLACE", "KEYS"}, keys...)
-		} else {
-			args = append([]string{dest.IP, dest.Port, "", "0", timeoutStr, "KEYS"}, keys...)
-		}
+		args := a.migrateCmdArgs(dest, timeoutStr, replace, keys)
 
 		resp = c.Cmd("MIGRATE", args)
 		if err := a.Connections().ValidateResp(resp, addr, "Unable to run command MIGRATE"); err != nil {
@@ -446,6 +436,20 @@ func (a *Admin) MigrateKeysInSlot(addr string, dest *Node, slot Slot, batch int,
 	}
 
 	return keyCount, nil
+}
+
+func (a *Admin) migrateCmdArgs(dest *Node, timeoutStr string, replace bool, keys []string) []string {
+	args := []string{dest.IP, dest.Port, "", "0", timeoutStr}
+	if password, ok := a.Connections().GetAUTH(); ok {
+		args = append(args, "AUTH", password)
+	}
+	if replace {
+		args = append(args, "REPLACE", "KEYS")
+	} else {
+		args = append(args, "KEYS")
+	}
+	args = append(args, keys...)
+	return args
 }
 
 // ForgetNode used to force other redis cluster node to forget a specific node

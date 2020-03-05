@@ -58,6 +58,8 @@ type IAdminConnections interface {
 	ValidatePipeResp(c IClient, addr, errMessage string) bool
 	// Reset close all connections and clear the connection map
 	Reset()
+	// GetAUTH return password and true if connection password is set, else return false.
+	GetAUTH() (string, bool)
 }
 
 // AdminConnections connection map for redis cluster
@@ -96,6 +98,14 @@ func NewAdminConnections(addrs []string, options *AdminOptions, log logr.Logger)
 	}
 	cnx.AddAll(addrs)
 	return cnx
+}
+
+// GetAUTH return password and true if connection password is set, else return false.
+func (cnx *AdminConnections) GetAUTH() (string, bool) {
+	if len(cnx.password) > 0 {
+		return cnx.password, true
+	}
+	return "", false
 }
 
 // Reconnect force a reconnection on the given address
