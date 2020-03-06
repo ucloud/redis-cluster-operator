@@ -1,7 +1,9 @@
 package configmaps
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -9,7 +11,11 @@ import (
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 )
 
-const RestoreSucceeded = "succeeded"
+const (
+	RestoreSucceeded = "succeeded"
+
+	RedisConfKey = "redis.conf"
+)
 
 // NewConfigMapForCR creates a new ConfigMap for the given Cluster
 func NewConfigMapForCR(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *corev1.ConfigMap {
@@ -45,6 +51,8 @@ if [ -f ${CLUSTER_CONFIG} ]; then
 fi
 exec "$@"`
 
+	redisConfContent := generateRedisConfContent(cluster.Spec.Config)
+
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            RedisConfigMapName(cluster.Name),
@@ -55,8 +63,30 @@ exec "$@"`
 		Data: map[string]string{
 			"shutdown.sh": shutdownContent,
 			"fix-ip.sh":   fixIPContent,
+			RedisConfKey:  redisConfContent,
 		},
 	}
+}
+
+func generateRedisConfContent(configMap map[string]string) string {
+	if configMap == nil {
+		return ""
+	}
+
+	var buffer bytes.Buffer
+
+	keys := make([]string, 0, len(configMap))
+	for k := range configMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		buffer.WriteString(fmt.Sprintf("%s %s", k, configMap[k]))
+		buffer.WriteString("\n")
+	}
+
+	return buffer.String()
 }
 
 func RedisConfigMapName(clusterName string) string {

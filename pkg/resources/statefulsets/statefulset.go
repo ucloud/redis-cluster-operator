@@ -149,6 +149,7 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 	cmd := []string{
 		"/conf/fix-ip.sh",
 		"redis-server",
+		"/conf/redis.conf",
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
