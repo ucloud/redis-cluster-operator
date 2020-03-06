@@ -82,7 +82,11 @@ func generateRedisConfContent(configMap map[string]string) string {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		buffer.WriteString(fmt.Sprintf("%s %s", k, configMap[k]))
+		v := configMap[k]
+		if len(v) == 0 {
+			continue
+		}
+		buffer.WriteString(fmt.Sprintf("%s %s", k, v))
 		buffer.WriteString("\n")
 	}
 
