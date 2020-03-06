@@ -2,6 +2,7 @@ package manager
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -189,7 +190,7 @@ func (r *realEnsureResource) EnsureRedisSvc(cluster *redisv1alpha1.DistributedRe
 
 func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	cmName := configmaps.RedisConfigMapName(cluster.Name)
-	_, err := r.configMapClient.GetConfigMap(cluster.Namespace, cmName)
+	drcCm, err := r.configMapClient.GetConfigMap(cluster.Namespace, cmName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.logger.WithValues("ConfigMap.Namespace", cluster.Namespace, "ConfigMap.Name", cmName).
@@ -200,6 +201,13 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 			}
 		} else {
 			return err
+		}
+	} else {
+		if isRedisConfChanged(drcCm.Data[configmaps.RedisConfKey], cluster.Spec.Config, r.logger) {
+			cm := configmaps.NewConfigMapForCR(cluster, labels)
+			if err2 := r.configMapClient.UpdateConfigMap(cm); err2 != nil {
+				return err2
+			}
 		}
 	}
 
@@ -236,4 +244,27 @@ func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.Distrib
 		return err
 	}
 	return nil
+}
+
+func isRedisConfChanged(confInCm string, currentConf map[string]string, log logr.Logger) bool {
+	lines := strings.Split(strings.TrimSuffix(confInCm, "\n"), "\n")
+	if len(lines) != len(currentConf) {
+		return true
+	}
+	for _, line := range lines {
+		line = strings.TrimSuffix(line, " ")
+		confLine := strings.SplitN(line, " ", 2)
+		if len(confLine) == 2 {
+			if valueInCurrentConf, ok := currentConf[confLine[0]]; !ok {
+				return true
+			} else {
+				if valueInCurrentConf != confLine[1] {
+					return true
+				}
+			}
+		} else {
+			log.Info("custom config is invalid", "raw", line, "split", confLine)
+		}
+	}
+	return false
 }

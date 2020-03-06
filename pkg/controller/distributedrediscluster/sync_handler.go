@@ -36,6 +36,11 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}
+
+	// Redis only load db from append only file when AOF ON, because of
+	// we only backed up the RDB file when doing data backup, so we set
+	// "appendonly no" force here when do restore.
+	dbLoadedFromDiskWhenRestore(cluster, ctx.reqLogger)
 	labels := getLabels(cluster)
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
@@ -98,7 +103,17 @@ func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.Distr
 	if update || updateDefault {
 		return r.crController.UpdateCR(cluster)
 	}
+
 	return nil
+}
+
+func dbLoadedFromDiskWhenRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) {
+	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
+		if cluster.Spec.Config != nil {
+			reqLogger.Info("force appendonly = no when do restore")
+			cluster.Spec.Config["appendonly"] = "no"
+		}
+	}
 }
 
 func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) (bool, error) {
