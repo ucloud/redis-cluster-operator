@@ -48,7 +48,6 @@ maxmemory 1000000000
 maxmemory-policy noeviction
 maxmemory-samples 5
 no-appendfsync-on-rewrite no
-notify-keyspace-events 
 repl-backlog-size 1048576
 repl-backlog-ttl 3600
 set-max-intset-entries 512
