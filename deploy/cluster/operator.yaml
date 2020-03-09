@@ -16,7 +16,7 @@ spec:
       containers:
         - name: redis-cluster-operator
           # Replace this with the built image name
-          image: uhub.service.ucloud.cn/operator/redis-cluster-operator:latest
+          image: fishu/redis-cluster-operator:latest
           command:
           - redis-cluster-operator
           args:

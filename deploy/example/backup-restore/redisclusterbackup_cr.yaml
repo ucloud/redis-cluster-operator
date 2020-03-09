@@ -15,7 +15,7 @@ metadata:
     redis.kun/scope: cluster-scoped
   name: example-redisclusterbackup
 spec:
-  image: uhub.service.ucloud.cn/operator/redis-tools:5.0.4
+  image: redis-tools:5.0.4
   redisClusterName: example-distributedrediscluster
   storageSecretName: s3-secret
   # Replace this with the s3 info

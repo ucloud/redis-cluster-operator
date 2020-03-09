@@ -6,7 +6,7 @@ metadata:
     redis.kun/scope: cluster-scoped
   name: example-distributedrediscluster
 spec:
-  image: uhub.service.ucloud.cn/operator/redis:5.0.4-alpine
+  image: redis:5.0.4-alpine
   masterSize: 3
   clusterReplicas: 1
   monitor:
