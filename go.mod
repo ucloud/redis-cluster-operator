@@ -1,7 +1,6 @@
 module github.com/ucloud/redis-cluster-operator
 
 require (
-	cloud.google.com/go v0.41.0
 	github.com/appscode/go v0.0.0-20191006073906-e3d193d493fc
 	github.com/appscode/osm v0.12.0
 	github.com/aws/aws-sdk-go v1.20.20

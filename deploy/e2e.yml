@@ -15,7 +15,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: e2e
-          image: uhub.service.ucloud.cn/operator/redis-cluster-operator-e2e
+          image: fishu/redis-cluster-operator-e2e
           imagePullPolicy: Always
           env:
             - name: TEST_TIMEOUT

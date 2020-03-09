@@ -15,7 +15,7 @@ spec:
       serviceAccountName: redis-cluster-operator
       containers:
         - name: redis-cluster-operator
-          image: uhub.service.ucloud.cn/operator/redis-cluster-operator:latest
+          image: fishu/redis-cluster-operator:latest
           command:
             - redis-cluster-operator
           args:
