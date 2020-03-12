@@ -236,7 +236,7 @@ func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.Distrib
 		return nil
 	}
 	backup := cluster.Status.Restore.Backup
-	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
 	if err != nil {
 		return err
 	}

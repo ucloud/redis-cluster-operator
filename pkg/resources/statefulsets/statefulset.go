@@ -20,9 +20,10 @@ import (
 var log = logf.Log.WithName("resource_statefulset")
 
 const (
-	redisStorageVolumeName = "redis-data"
-	redisServerName        = "redis"
-	hostnameTopologyKey    = "kubernetes.io/hostname"
+	redisStorageVolumeName      = "redis-data"
+	redisRestoreLocalVolumeName = "redis-local"
+	redisServerName             = "redis"
+	hostnameTopologyKey         = "kubernetes.io/hostname"
 
 	graceTime = 30
 
@@ -299,11 +300,11 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) (corev1.Container, error) {
 	backup := cluster.Status.Restore.Backup
 	backupSpec := backup.Spec.Backend
-	bucket, err := backupSpec.Container()
+	location, err := backupSpec.Location()
 	if err != nil {
 		return corev1.Container{}, err
 	}
-	folderName, err := backup.Location()
+	folderName, err := backup.RemotePath()
 	if err != nil {
 		return corev1.Container{}, err
 	}
@@ -315,7 +316,7 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password
 		Args: []string{
 			redisv1alpha1.JobTypeRestore,
 			fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
-			fmt.Sprintf(`--bucket=%s`, bucket),
+			fmt.Sprintf(`--location=%s`, location),
 			fmt.Sprintf(`--folder=%s`, folderName),
 			fmt.Sprintf(`--snapshot=%s`, backup.Name),
 			"--",
@@ -353,15 +354,27 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password
 			},
 		},
 	}
+
+	if backup.IsRefLocalPVC() {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      redisRestoreLocalVolumeName,
+			MountPath: backup.Spec.Backend.Local.MountPath,
+			SubPath:   backup.Spec.Backend.Local.SubPath,
+			ReadOnly:  true,
+		})
+	}
+
 	if password != nil {
 		container.Env = append(container.Env, *password)
 	}
+
 	if backup.Spec.PodSpec != nil {
 		container.Resources = backup.Spec.PodSpec.Resources
 		container.LivenessProbe = backup.Spec.PodSpec.LivenessProbe
 		container.ReadinessProbe = backup.Spec.PodSpec.ReadinessProbe
 		container.Lifecycle = backup.Spec.PodSpec.Lifecycle
 	}
+
 	return container, nil
 }
 
@@ -418,14 +431,24 @@ func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volum
 	if dataVolume != nil {
 		volumes = append(volumes, *dataVolume)
 	}
-	if cluster.IsRestoreFromBackup() && cluster.Status.Restore.Backup != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: "osmconfig",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cluster.Status.Restore.Backup.OSMSecretName(),
-				},
+
+	if !cluster.IsRestoreFromBackup() || cluster.Status.Restore.Backup == nil {
+		return volumes
+	}
+
+	volumes = append(volumes, corev1.Volume{
+		Name: "osmconfig",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cluster.Status.Restore.Backup.OSMSecretName(),
 			},
+		},
+	})
+
+	if cluster.Status.Restore.Backup.IsRefLocalPVC() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         redisRestoreLocalVolumeName,
+			VolumeSource: cluster.Status.Restore.Backup.Spec.Local.VolumeSource,
 		})
 	}
 

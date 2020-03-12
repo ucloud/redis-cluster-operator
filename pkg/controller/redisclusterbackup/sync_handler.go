@@ -50,20 +50,6 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return nil
 	}
 
-	//if backup.Labels == nil {
-	//	backup.Labels = make(map[string]string)
-	//}
-	//backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
-	//if err := r.crController.UpdateCR(backup); err != nil {
-	//	r.recorder.Event(
-	//		backup,
-	//		corev1.EventTypeWarning,
-	//		event.BackupError,
-	//		err.Error(),
-	//	)
-	//	return err
-	//}
-
 	if err := r.ValidateBackup(backup); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return err
@@ -103,7 +89,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)
@@ -301,7 +287,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 
 func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) ([]corev1.Container, error) {
 	backupSpec := backup.Spec.Backend
-	bucket, err := backupSpec.Container()
+	location, err := backupSpec.Location()
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +299,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 			if i == masterNum {
 				break
 			}
-			folderName, err := backup.Location()
+			folderName, err := backup.RemotePath()
 			if err != nil {
 				r.recorder.Event(
 					backup,
@@ -331,7 +317,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				Args: []string{
 					redisv1alpha1.JobTypeBackup,
 					fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
-					fmt.Sprintf(`--bucket=%s`, bucket),
+					fmt.Sprintf(`--location=%s`, location),
 					fmt.Sprintf(`--host=%s`, node.IP),
 					fmt.Sprintf(`--folder=%s`, folderName),
 					fmt.Sprintf(`--snapshot=%s-%d`, backup.Name, i),

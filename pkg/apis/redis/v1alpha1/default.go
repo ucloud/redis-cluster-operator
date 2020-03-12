@@ -114,7 +114,7 @@ func (in *RedisClusterBackup) Validate() error {
 	return nil
 }
 
-func (in *RedisClusterBackup) Location() (string, error) {
+func (in *RedisClusterBackup) RemotePath() (string, error) {
 	spec := in.Spec.Backend
 	timePrefix := in.Status.StartTime.Format("20060102150405")
 	if spec.S3 != nil {
@@ -137,4 +137,8 @@ func (in *RedisClusterBackup) OSMSecretName() string {
 
 func (in *RedisClusterBackup) JobName() string {
 	return fmt.Sprintf("redisbackup-%v", in.Name)
+}
+
+func (in *RedisClusterBackup) IsRefLocalPVC() bool {
+	return in.Spec.Local != nil && in.Spec.Local.PersistentVolumeClaim != nil
 }
