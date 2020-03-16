@@ -3,6 +3,7 @@ package redisclusterbackup
 import (
 	"context"
 
+	batch "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -99,4 +100,13 @@ func newDirectClient(config *rest.Config) client.Client {
 		panic(err)
 	}
 	return c
+}
+
+func isJobFinished(j *batch.Job) bool {
+	for _, c := range j.Status.Conditions {
+		if (c.Type == batch.JobComplete || c.Type == batch.JobFailed) && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }

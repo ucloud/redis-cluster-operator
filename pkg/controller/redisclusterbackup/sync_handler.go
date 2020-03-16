@@ -435,7 +435,7 @@ func (r *ReconcileRedisClusterBackup) createPVCForBackup(backup *redisv1alpha1.R
 
 func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, backup *redisv1alpha1.RedisClusterBackup) error {
 	reqLogger.Info("Handle Backup Job")
-	job, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
+	jobObj, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
 	if err != nil {
 		// TODO: Sometimes the job is created successfully, but it cannot be obtained immediately.
 		if errors.IsNotFound(err) {
@@ -462,7 +462,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		}
 		return err
 	}
-	if job.Status.Succeeded == 0 && job.Status.Failed < utils.Int32(job.Spec.BackoffLimit) {
+	if !isJobFinished(jobObj) {
 		return fmt.Errorf("wait for job Succeeded or Failed")
 	}
 
@@ -476,10 +476,13 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		)
 		return err
 	}
-	for _, o := range job.OwnerReferences {
+
+	jobType := jobObj.Status.Conditions[0].Type
+
+	for _, o := range jobObj.OwnerReferences {
 		if o.Kind == redisv1alpha1.RedisClusterBackupKind {
 			if o.Name == backup.Name {
-				jobSucceeded := job.Status.Succeeded > 0
+				jobSucceeded := jobType == batchv1.JobComplete
 				if jobSucceeded {
 					backup.Status.Phase = redisv1alpha1.BackupPhaseSucceeded
 				} else {
