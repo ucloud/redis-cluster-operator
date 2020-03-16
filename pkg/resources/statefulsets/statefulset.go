@@ -85,7 +85,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 	if spec.Monitor != nil {
 		ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, redisExporterContainer(cluster, password))
 	}
-	if cluster.IsRestoreFromBackup() && cluster.Status.Restore.Backup != nil {
+	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() && cluster.Status.Restore.Backup != nil {
 		initContainer, err := redisInitContainer(cluster, password)
 		if err != nil {
 			return nil, err
@@ -432,7 +432,9 @@ func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volum
 		volumes = append(volumes, *dataVolume)
 	}
 
-	if !cluster.IsRestoreFromBackup() || cluster.Status.Restore.Backup == nil {
+	if !cluster.IsRestoreFromBackup() ||
+		cluster.Status.Restore.Backup == nil ||
+		cluster.IsRestored() {
 		return volumes
 	}
 
