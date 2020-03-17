@@ -89,7 +89,14 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend, []metav1.OwnerReference{
+		{
+			APIVersion: redisv1alpha1.SchemeGroupVersion.String(),
+			Kind:       redisv1alpha1.RedisClusterBackupKind,
+			Name:       backup.Name,
+			UID:        backup.UID,
+		},
+	})
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)

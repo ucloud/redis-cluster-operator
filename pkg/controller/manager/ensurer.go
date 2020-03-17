@@ -236,7 +236,7 @@ func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.Distrib
 		return nil
 	}
 	backup := cluster.Status.Restore.Backup
-	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend, redisv1alpha1.DefaultOwnerReferences(cluster))
 	if err != nil {
 		return err
 	}

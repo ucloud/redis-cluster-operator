@@ -18,7 +18,7 @@ import (
 //
 // /etc/osm
 // └── config
-func NewRcloneSecret(kc client.Client, name, namespace string, spec api.Backend) (*core.Secret, error) {
+func NewRcloneSecret(kc client.Client, name, namespace string, spec api.Backend, ownerReference []metav1.OwnerReference) (*core.Secret, error) {
 	osmCtx, err := newContext(kc, spec, namespace)
 	if err != nil {
 		return nil, err
@@ -28,8 +28,9 @@ func NewRcloneSecret(kc client.Client, name, namespace string, spec api.Backend)
 
 	out := &core.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:            name,
+			Namespace:       namespace,
+			OwnerReferences: ownerReference,
 		},
 		Data: map[string][]byte{
 			"config": osmBytes,
