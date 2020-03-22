@@ -30,6 +30,8 @@ spec:
               value: ""
             - name: S3_BUCKET
               value: ""
+            - name: CLUSTER_DOMAIN
+              value: ""
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

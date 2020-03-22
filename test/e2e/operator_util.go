@@ -90,7 +90,7 @@ func NewDistributedRedisCluster(name, namespace, image, passwordName string, mas
 			},
 			Storage: &redisv1alpha1.RedisStorage{
 				Type:        "persistent-claim",
-				Size:        resource.MustParse("1Gi"),
+				Size:        resource.MustParse("10Gi"),
 				Class:       storageClassName,
 				DeleteClaim: true,
 			},
@@ -338,4 +338,20 @@ func IsRedisClusterBackupProperly(f *Framework, drcb *redisv1alpha1.RedisCluster
 		}
 		return nil
 	}
+}
+
+func NewGoRedisClient(svc, namespaces, password string) *GoRedis {
+	addr := fmt.Sprintf("%s.%s.svc.%s:6379", svc, namespaces, os.Getenv("CLUSTER_DOMAIN"))
+	return NewGoRedis(addr, password)
+}
+
+func IsDBSizeConsistent(originalDBSize int64, goredis *GoRedis) error {
+	curDBSize, err := goredis.DBSize()
+	if err != nil {
+		return err
+	}
+	if curDBSize != originalDBSize {
+		return LogAndReturnErrorf("DBSize do not Equal current: %d, original: %d", curDBSize, originalDBSize)
+	}
+	return nil
 }
