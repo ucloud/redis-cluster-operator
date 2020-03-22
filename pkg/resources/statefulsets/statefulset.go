@@ -348,7 +348,7 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password
 				MountPath: redisv1alpha1.BackupDumpDir,
 			},
 			{
-				Name:      "osmconfig",
+				Name:      "rcloneconfig",
 				ReadOnly:  true,
 				MountPath: osm.SecretMountPath,
 			},
@@ -439,10 +439,10 @@ func redisVolumes(cluster *redisv1alpha1.DistributedRedisCluster) []corev1.Volum
 	}
 
 	volumes = append(volumes, corev1.Volume{
-		Name: "osmconfig",
+		Name: "rcloneconfig",
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: cluster.Status.Restore.Backup.OSMSecretName(),
+				SecretName: cluster.Status.Restore.Backup.RCloneSecretName(),
 			},
 		},
 	})

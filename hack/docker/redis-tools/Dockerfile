@@ -8,7 +8,7 @@ RUN set -x \
     zip \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man /tmp/*
 
-COPY osm /usr/local/bin/osm
+COPY rclone /usr/local/bin/rclone
 COPY redis-tools.sh /usr/local/bin/redis-tools.sh
 RUN chmod +x /usr/local/bin/redis-tools.sh
 

@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	SecretMountPath = "/etc/osm"
+	SecretMountPath = "/etc/rclone"
 	CaCertFileName  = "ca.crt"
 )
 

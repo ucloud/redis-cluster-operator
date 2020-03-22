@@ -31,7 +31,7 @@ REDIS_FOLDER=${REDIS_FOLDER:-}
 REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
 REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
-OSM_CONFIG_FILE=/etc/osm/config
+RCLONE_CONFIG_FILE=/etc/rclone/config
 
 op=$1
 shift
@@ -114,7 +114,7 @@ case "$op" in
     ls -lh "$SOURCE_DIR"
     echo "Uploading dump file to the backend......."
     echo "From $SOURCE_DIR"
-    osm --config "$OSM_CONFIG_FILE" copy "$SOURCE_DIR" "$REDIS_LOCATION"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
+    rclone --config "$RCLONE_CONFIG_FILE" copy "$SOURCE_DIR" "$REDIS_LOCATION"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
@@ -128,7 +128,7 @@ case "$op" in
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
     SOURCE_SNAPSHOT="$REDIS_LOCATION"/"$REDIS_FOLDER/$REDIS_SNAPSHOT"
     echo "From $SOURCE_SNAPSHOT"
-    osm --config "$OSM_CONFIG_FILE" sync "$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
+    rclone --config "$RCLONE_CONFIG_FILE" sync "$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
 
     echo "Recovery successful"
     ;;

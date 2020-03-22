@@ -69,9 +69,9 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisSvc(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisSvc")
 	}
-	if err := r.ensurer.EnsureRedisOSMSecret(cluster, labels); err != nil {
+	if err := r.ensurer.EnsureRedisRCloneSecret(cluster, labels); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
-			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
+			return Kubernetes.Wrap(err, "EnsureRedisRCloneSecret")
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}

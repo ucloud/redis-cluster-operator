@@ -13,18 +13,18 @@ import (
 )
 
 // NewRcloneSecret creates a secret that contains the config file of Rclone.
-// So, generally, if this secret is mounted in `etc/osm`,
-// the tree of `/etc/osm` directory will be similar to,
+// So, generally, if this secret is mounted in `etc/rclone`,
+// the tree of `/etc/rclone` directory will be similar to,
 //
-// /etc/osm
+// /etc/rclone
 // └── config
 func NewRcloneSecret(kc client.Client, name, namespace string, spec api.Backend, ownerReference []metav1.OwnerReference) (*core.Secret, error) {
-	osmCtx, err := newContext(kc, spec, namespace)
+	rcloneCtx, err := newContext(kc, spec, namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	osmBytes := []byte(osmCtx)
+	rcloneBytes := []byte(rcloneCtx)
 
 	out := &core.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -33,7 +33,7 @@ func NewRcloneSecret(kc client.Client, name, namespace string, spec api.Backend,
 			OwnerReferences: ownerReference,
 		},
 		Data: map[string][]byte{
-			"config": osmBytes,
+			"config": rcloneBytes,
 		},
 	}
 	return out, nil

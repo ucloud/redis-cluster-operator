@@ -24,7 +24,7 @@ type IEnsureResource interface {
 	EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
-	EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	EnsureRedisRCloneSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 }
 
 type realEnsureResource struct {
@@ -231,12 +231,12 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 	return nil
 }
 
-func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+func (r *realEnsureResource) EnsureRedisRCloneSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	if !cluster.IsRestoreFromBackup() || cluster.IsRestored() {
 		return nil
 	}
 	backup := cluster.Status.Restore.Backup
-	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend, redisv1alpha1.DefaultOwnerReferences(cluster))
+	secret, err := osm.NewRcloneSecret(r.client, backup.RCloneSecretName(), cluster.Namespace, backup.Spec.Backend, redisv1alpha1.DefaultOwnerReferences(cluster))
 	if err != nil {
 		return err
 	}

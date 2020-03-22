@@ -9,6 +9,11 @@ if [[ -z ${STORAGECLASSNAME} ]]; then
     exit 1
 fi
 
+if [[ -z ${CLUSTER_DOMAIN} ]]; then
+    echo "env CLUSTER_DOMAIN not set"
+    exit 1
+fi
+
 if [[ -z ${GINKGO_SKIP} ]]; then
     export GINKGO_SKIP=""
 fi

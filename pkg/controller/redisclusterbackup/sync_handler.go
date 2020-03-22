@@ -89,7 +89,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewRcloneSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend, []metav1.OwnerReference{
+	secret, err := osm.NewRcloneSecret(r.client, backup.RCloneSecretName(), backup.Namespace, backup.Spec.Backend, []metav1.OwnerReference{
 		{
 			APIVersion: redisv1alpha1.SchemeGroupVersion.String(),
 			Kind:       redisv1alpha1.RedisClusterBackupKind,
@@ -98,7 +98,7 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		},
 	})
 	if err != nil {
-		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
+		msg := fmt.Sprintf("Failed to generate rclone secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)
 		r.recorder.Event(
 			backup,
@@ -252,10 +252,10 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 							VolumeSource: persistentVolume.VolumeSource,
 						},
 						{
-							Name: "osmconfig",
+							Name: "rcloneconfig",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: backup.OSMSecretName(),
+									SecretName: backup.RCloneSecretName(),
 								},
 							},
 						},
@@ -336,7 +336,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 						MountPath: redisv1alpha1.BackupDumpDir,
 					},
 					{
-						Name:      "osmconfig",
+						Name:      "rcloneconfig",
 						ReadOnly:  true,
 						MountPath: osm.SecretMountPath,
 					},

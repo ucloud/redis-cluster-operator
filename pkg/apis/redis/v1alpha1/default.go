@@ -131,8 +131,8 @@ func (in *RedisClusterBackup) RemotePath() (string, error) {
 	return "", fmt.Errorf("no storage provider is configured")
 }
 
-func (in *RedisClusterBackup) OSMSecretName() string {
-	return fmt.Sprintf("osmconfig-%v", in.Name)
+func (in *RedisClusterBackup) RCloneSecretName() string {
+	return fmt.Sprintf("rcloneconfig-%v", in.Name)
 }
 
 func (in *RedisClusterBackup) JobName() string {
