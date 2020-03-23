@@ -19,14 +19,14 @@ type GoRedis struct {
 func NewGoRedis(addr, password string) *GoRedis {
 	return &GoRedis{
 		client: redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:      []string{addr},
-			Password:   password,
-			MaxRetries: 5,
-
-			PoolSize:     3,
-			MinIdleConns: 1,
-			PoolTimeout:  defaultTimeOut,
-			IdleTimeout:  defaultTimeOut,
+			Addrs:    []string{addr},
+			Password: password,
+			//MaxRetries: 5,
+			//
+			//PoolSize:     3,
+			//MinIdleConns: 1,
+			//PoolTimeout:  defaultTimeOut,
+			//IdleTimeout:  defaultTimeOut,
 		}),
 		password: password,
 	}
@@ -60,4 +60,9 @@ func (g *GoRedis) DBSize() (int64, error) {
 // Password return redis password.
 func (g *GoRedis) Password() string {
 	return g.password
+}
+
+// Close closes the cluster client.
+func (g *GoRedis) Close() error {
+	return g.client.Close()
 }
