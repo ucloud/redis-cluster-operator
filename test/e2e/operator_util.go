@@ -122,6 +122,9 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 			return err
 		}
 		if result.Status.Status != redisv1alpha1.ClusterStatusOK {
+			if result.Status.Status == redisv1alpha1.ClusterStatusKO {
+				f.Logf("DistributedRedisCluster %s is %s, reason: %s", drc.Name, result.Status.Status, result.Status.Reason)
+			}
 			return LogAndReturnErrorf("DistributedRedisCluster %s status not healthy, current: %s", drc.Name, result.Status.Status)
 		}
 		stsList, err := f.GetDRCStatefulSetByLabels(getLabels(drc))
@@ -177,6 +180,7 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 			}
 		}
 
+		drc.Spec = result.Spec
 		return nil
 	}
 }
@@ -296,6 +300,21 @@ func DeleteMasterPodForDRC(drc *redisv1alpha1.DistributedRedisCluster, client cl
 				Failf("can not delete DistributedRedisCluster's pod, err: %s", err)
 			}
 		}
+	}
+}
+
+func IsDRCPodBeDeleted(f *Framework, drc *redisv1alpha1.DistributedRedisCluster) func() error {
+	return func() error {
+		stsList, err := f.GetDRCStatefulSetByLabels(getLabels(drc))
+		if err != nil {
+			return LogAndReturnErrorf("GetDRCStatefulSetByLabels err: %s", err)
+		}
+		for _, sts := range stsList.Items {
+			if sts.Status.ReadyReplicas != (drc.Spec.ClusterReplicas + 1) {
+				return nil
+			}
+		}
+		return LogAndReturnErrorf("StatefulSet's Pod still running")
 	}
 }
 

@@ -37,6 +37,7 @@ var _ = Describe("DistributedRedisCluster CRUD", func() {
 		})
 		It("should recover from accidentally deleting master pods", func() {
 			e2e.DeleteMasterPodForDRC(drc, f.Client)
+			Eventually(e2e.IsDRCPodBeDeleted(f, drc), "5m", "10s").ShouldNot(HaveOccurred())
 			Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
 			Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 		})

@@ -48,6 +48,7 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 				rdrc = e2e.RestoreDRC(drc, drcb)
 				Ω(f.CreateRedisCluster(rdrc)).Should(Succeed())
 				Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+				goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
 				Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 			})
 			Context("when restore is succeeded", func() {
@@ -59,6 +60,7 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 				})
 				It("should recover from accidentally deleting master pods", func() {
 					e2e.DeleteMasterPodForDRC(rdrc, f.Client)
+					Eventually(e2e.IsDRCPodBeDeleted(f, rdrc), "5m", "10s").ShouldNot(HaveOccurred())
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 				})

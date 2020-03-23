@@ -24,7 +24,7 @@ func Logf(format string, args ...interface{}) {
 // Failf reports a failure in the current e2e
 func Failf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	log("INFO", msg)
+	log("ERROR", msg)
 	ginkgo.Fail(nowStamp()+": "+msg, 1)
 }
 
