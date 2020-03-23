@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -106,7 +107,7 @@ func NewConfigMapForRestore(cluster *redisv1alpha1.DistributedRedisCluster, labe
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Data: map[string]string{
-			RestoreSucceeded: fmt.Sprintf("%d", cluster.Status.Restore.RestoreSucceeded),
+			RestoreSucceeded: strconv.Itoa(0),
 		},
 	}
 }

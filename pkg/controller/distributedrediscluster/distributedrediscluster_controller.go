@@ -249,10 +249,35 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, err
 	}
 
-	// update cr and wait for the next Reconcile loop
-	if instance.IsRestoreFromBackup() && !instance.IsRestored() {
+	// mark .Status.Restore.Phase = RestorePhaseRestart, will
+	// remove init container and restore volume that referenced in stateulset for
+	// dump RDB file from backup, then the redis master node will be restart.
+	if instance.IsRestoreFromBackup() && instance.IsRestoreRunning() {
 		reqLogger.Info("update restore redis cluster cr")
-		instance.Status.Restore.RestoreSucceeded = 1
+		instance.Status.Restore.Phase = redisv1alpha1.RestorePhaseRestart
+		if err := r.crController.UpdateCRStatus(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		if err := r.ensurer.UpdateRedisStatefulsets(instance, getLabels(instance)); err != nil {
+			return reconcile.Result{}, err
+		}
+		waiter := &waitStatefulSetUpdating{
+			name:                  "waitMasterNodeRestarting",
+			timeout:               60 * time.Second,
+			tick:                  5 * time.Second,
+			statefulSetController: r.statefulSetController,
+			cluster:               instance,
+		}
+		if err := waiting(waiter, ctx.reqLogger); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	// restore succeeded, then update cr and wait for the next Reconcile loop
+	if instance.IsRestoreFromBackup() && instance.IsRestoreRestarting() {
+		reqLogger.Info("update restore redis cluster cr")
+		instance.Status.Restore.Phase = redisv1alpha1.RestorePhaseSucceeded
 		if err := r.crController.UpdateCRStatus(instance); err != nil {
 			return reconcile.Result{}, err
 		}

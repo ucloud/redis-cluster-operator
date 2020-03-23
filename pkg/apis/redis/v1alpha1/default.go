@@ -70,7 +70,19 @@ func (in *DistributedRedisCluster) IsRestoreFromBackup() bool {
 }
 
 func (in *DistributedRedisCluster) IsRestored() bool {
-	return in.Status.Restore.RestoreSucceeded > 0
+	return in.Status.Restore.Phase == RestorePhaseSucceeded
+}
+
+func (in *DistributedRedisCluster) ShouldInitRestorePhase() bool {
+	return in.Status.Restore.Phase == ""
+}
+
+func (in *DistributedRedisCluster) IsRestoreRunning() bool {
+	return in.Status.Restore.Phase == RestorePhaseRunning
+}
+
+func (in *DistributedRedisCluster) IsRestoreRestarting() bool {
+	return in.Status.Restore.Phase == RestorePhaseRestart
 }
 
 func defaultResource() *v1.ResourceRequirements {
