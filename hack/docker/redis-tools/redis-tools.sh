@@ -14,6 +14,7 @@ show_help() {
   echo "    --host=HOST                    database host"
   echo "    --user=USERNAME                database username"
   echo "    --bucket=BUCKET                name of bucket"
+  echo "    --location=LOCATION            location of backend (<provider>:<bucket name>)"
   echo "    --folder=FOLDER                name of folder in bucket"
   echo "    --snapshot=SNAPSHOT            name of snapshot"
 }
@@ -25,11 +26,12 @@ REDIS_PORT=${REDIS_PORT:-6379}
 REDIS_USER=${REDIS_USER:-}
 REDIS_PASSWORD=${REDIS_PASSWORD:-}
 REDIS_BUCKET=${REDIS_BUCKET:-}
+REDIS_LOCATION=${REDIS_LOCATION:-}
 REDIS_FOLDER=${REDIS_FOLDER:-}
 REDIS_SNAPSHOT=${REDIS_SNAPSHOT:-}
 REDIS_DATA_DIR=${REDIS_DATA_DIR:-/data}
 REDIS_RESTORE_SUCCEEDED=${REDIS_RESTORE_SUCCEEDED:-0}
-OSM_CONFIG_FILE=/etc/osm/config
+RCLONE_CONFIG_FILE=/etc/rclone/config
 
 op=$1
 shift
@@ -54,6 +56,10 @@ while test $# -gt 0; do
       ;;
     --bucket*)
       export REDIS_BUCKET=$(echo $1 | sed -e 's/^[^=]*=//g')
+      shift
+      ;;
+    --location*)
+      export REDIS_LOCATION=$(echo $1 | sed -e 's/^[^=]*=//g')
       shift
       ;;
     --folder*)
@@ -108,7 +114,7 @@ case "$op" in
     ls -lh "$SOURCE_DIR"
     echo "Uploading dump file to the backend......."
     echo "From $SOURCE_DIR"
-    osm --config "$OSM_CONFIG_FILE" copy "$SOURCE_DIR" ceph:"$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
+    rclone --config "$RCLONE_CONFIG_FILE" copy "$SOURCE_DIR" "$REDIS_LOCATION"/"$REDIS_FOLDER/$REDIS_SNAPSHOT" -v
 
     echo "Backup successful"
     ;;
@@ -120,9 +126,9 @@ case "$op" in
     fi
     index=$(echo "${POD_NAME}" | awk -F- '{print $(NF-1)}')
     REDIS_SNAPSHOT=${REDIS_SNAPSHOT}-${index}
-    SOURCE_SNAPSHOT="$REDIS_BUCKET"/"$REDIS_FOLDER/$REDIS_SNAPSHOT"
+    SOURCE_SNAPSHOT="$REDIS_LOCATION"/"$REDIS_FOLDER/$REDIS_SNAPSHOT"
     echo "From $SOURCE_SNAPSHOT"
-    osm --config "$OSM_CONFIG_FILE" sync ceph:"$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
+    rclone --config "$RCLONE_CONFIG_FILE" sync "$SOURCE_SNAPSHOT" "$REDIS_DATA_DIR" -v
 
     echo "Recovery successful"
     ;;

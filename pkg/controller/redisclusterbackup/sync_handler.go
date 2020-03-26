@@ -50,20 +50,6 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return nil
 	}
 
-	//if backup.Labels == nil {
-	//	backup.Labels = make(map[string]string)
-	//}
-	//backup.Labels[redisv1alpha1.LabelClusterName] = backup.Spec.RedisClusterName
-	//if err := r.crController.UpdateCR(backup); err != nil {
-	//	r.recorder.Event(
-	//		backup,
-	//		corev1.EventTypeWarning,
-	//		event.BackupError,
-	//		err.Error(),
-	//	)
-	//	return err
-	//}
-
 	if err := r.ValidateBackup(backup); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return err
@@ -103,9 +89,16 @@ func (r *ReconcileRedisClusterBackup) create(reqLogger logr.Logger, backup *redi
 		return err
 	}
 
-	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), backup.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.RCloneSecretName(), backup.Namespace, backup.Spec.Backend, []metav1.OwnerReference{
+		{
+			APIVersion: redisv1alpha1.SchemeGroupVersion.String(),
+			Kind:       redisv1alpha1.RedisClusterBackupKind,
+			Name:       backup.Name,
+			UID:        backup.UID,
+		},
+	})
 	if err != nil {
-		msg := fmt.Sprintf("Failed to generate osm secret. Reason: %v", err)
+		msg := fmt.Sprintf("Failed to generate rclone secret. Reason: %v", err)
 		r.markAsFailedBackup(backup, msg)
 		r.recorder.Event(
 			backup,
@@ -259,10 +252,10 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 							VolumeSource: persistentVolume.VolumeSource,
 						},
 						{
-							Name: "osmconfig",
+							Name: "rcloneconfig",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: backup.OSMSecretName(),
+									SecretName: backup.RCloneSecretName(),
 								},
 							},
 						},
@@ -301,7 +294,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 
 func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.RedisClusterBackup, cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) ([]corev1.Container, error) {
 	backupSpec := backup.Spec.Backend
-	bucket, err := backupSpec.Container()
+	location, err := backupSpec.Location()
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +306,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 			if i == masterNum {
 				break
 			}
-			folderName, err := backup.Location()
+			folderName, err := backup.RemotePath()
 			if err != nil {
 				r.recorder.Event(
 					backup,
@@ -331,7 +324,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 				Args: []string{
 					redisv1alpha1.JobTypeBackup,
 					fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
-					fmt.Sprintf(`--bucket=%s`, bucket),
+					fmt.Sprintf(`--location=%s`, location),
 					fmt.Sprintf(`--host=%s`, node.IP),
 					fmt.Sprintf(`--folder=%s`, folderName),
 					fmt.Sprintf(`--snapshot=%s-%d`, backup.Name, i),
@@ -343,7 +336,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 						MountPath: redisv1alpha1.BackupDumpDir,
 					},
 					{
-						Name:      "osmconfig",
+						Name:      "rcloneconfig",
 						ReadOnly:  true,
 						MountPath: osm.SecretMountPath,
 					},
@@ -449,7 +442,7 @@ func (r *ReconcileRedisClusterBackup) createPVCForBackup(backup *redisv1alpha1.R
 
 func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, backup *redisv1alpha1.RedisClusterBackup) error {
 	reqLogger.Info("Handle Backup Job")
-	job, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
+	jobObj, err := r.jobController.GetJob(backup.Namespace, backup.JobName())
 	if err != nil {
 		// TODO: Sometimes the job is created successfully, but it cannot be obtained immediately.
 		if errors.IsNotFound(err) {
@@ -476,7 +469,7 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		}
 		return err
 	}
-	if job.Status.Succeeded == 0 && job.Status.Failed < utils.Int32(job.Spec.BackoffLimit) {
+	if !isJobFinished(jobObj) {
 		return fmt.Errorf("wait for job Succeeded or Failed")
 	}
 
@@ -490,10 +483,13 @@ func (r *ReconcileRedisClusterBackup) handleBackupJob(reqLogger logr.Logger, bac
 		)
 		return err
 	}
-	for _, o := range job.OwnerReferences {
+
+	jobType := jobObj.Status.Conditions[0].Type
+
+	for _, o := range jobObj.OwnerReferences {
 		if o.Kind == redisv1alpha1.RedisClusterBackupKind {
 			if o.Name == backup.Name {
-				jobSucceeded := job.Status.Succeeded > 0
+				jobSucceeded := jobType == batchv1.JobComplete
 				if jobSucceeded {
 					backup.Status.Phase = redisv1alpha1.BackupPhaseSucceeded
 				} else {

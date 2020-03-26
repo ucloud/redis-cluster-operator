@@ -59,6 +59,17 @@ const (
 	NodesPlacementInfoOptimal NodesPlacementInfo = "Optimal"
 )
 
+type RestorePhase string
+
+const (
+	// RestorePhaseRunning used for Restore that are currently running.
+	RestorePhaseRunning RestorePhase = "Running"
+	// RestorePhaseRestart used for Restore that are restart master nodes.
+	RestorePhaseRestart RestorePhase = "Restart"
+	// RestorePhaseSucceeded used for Restore that are Succeeded.
+	RestorePhaseSucceeded RestorePhase = "Succeeded"
+)
+
 const (
 	DatabaseNamePrefix = "redis"
 

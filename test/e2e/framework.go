@@ -71,13 +71,13 @@ func (f *Framework) AfterEach() error {
 // Logf write log to ginkgo output
 func (f *Framework) Logf(format string, a ...interface{}) {
 	l := fmt.Sprintf(format, a...)
-	Logf("namespace:%s %s", f.Namespace(), l)
+	Logf("namespace: %s %s", f.Namespace(), l)
 }
 
 // Logf write log to ginkgo output
 func (f *Framework) Failf(format string, a ...interface{}) {
 	l := fmt.Sprintf(format, a...)
-	Failf("namespace:%s %s", f.Namespace(), l)
+	Failf("namespace: %s %s", f.Namespace(), l)
 }
 
 // Namespace return the test namespace name

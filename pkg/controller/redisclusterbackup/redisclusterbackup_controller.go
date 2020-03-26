@@ -119,9 +119,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Job UpdateFunc Not Manage")
 				return false
 			}
-			oldObj := e.ObjectOld.(*batch.Job)
 			newObj := e.ObjectNew.(*batch.Job)
-			if isJobCompleted(oldObj, newObj) {
+			if isJobCompleted(newObj) {
 				return true
 			}
 			return false
@@ -284,15 +283,9 @@ func remove(list []string, s string) []string {
 	return list
 }
 
-func isJobCompleted(old, new *batch.Job) bool {
-	log.WithValues("Request.Namespace", new.Namespace).V(4).Info("isJobCompleted", "old.Succeeded", old.Status.Succeeded,
-		"new.Succeeded", new.Status.Succeeded, "old.Failed", old.Status.Failed, "new.Failed", new.Status.Failed)
-	if old.Status.Succeeded == 0 && new.Status.Succeeded > 0 {
-		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Succeeded", "job", new.Name)
-		return true
-	}
-	if old.Status.Failed < utils.Int32(old.Spec.BackoffLimit) && new.Status.Failed >= utils.Int32(new.Spec.BackoffLimit) {
-		log.WithValues("Request.Namespace", new.Namespace).Info("JobCompleted Failed", "job", new.Name)
+func isJobCompleted(newJob *batch.Job) bool {
+	if isJobFinished(newJob) {
+		log.WithValues("Request.Namespace", newJob.Namespace).Info("JobFinished", "type", newJob.Status.Conditions[0].Type, "job", newJob.Name)
 		return true
 	}
 	return false

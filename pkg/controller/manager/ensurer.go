@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -24,7 +23,8 @@ type IEnsureResource interface {
 	EnsureRedisHeadLessSvcs(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisSvc(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 	EnsureRedisConfigMap(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
-	EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	EnsureRedisRCloneSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
+	UpdateRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error
 }
 
 type realEnsureResource struct {
@@ -223,7 +223,7 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 			}
 			return err
 		}
-		if restoreCm.Data[configmaps.RestoreSucceeded] != strconv.Itoa(int(cluster.Status.Restore.RestoreSucceeded)) {
+		if cluster.Status.Restore.Phase == redisv1alpha1.RestorePhaseRestart && restoreCm.Data[configmaps.RestoreSucceeded] == "0" {
 			cm := configmaps.NewConfigMapForRestore(cluster, labels)
 			return r.configMapClient.UpdateConfigMap(cm)
 		}
@@ -231,12 +231,12 @@ func (r *realEnsureResource) EnsureRedisConfigMap(cluster *redisv1alpha1.Distrib
 	return nil
 }
 
-func (r *realEnsureResource) EnsureRedisOSMSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+func (r *realEnsureResource) EnsureRedisRCloneSecret(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
 	if !cluster.IsRestoreFromBackup() || cluster.IsRestored() {
 		return nil
 	}
 	backup := cluster.Status.Restore.Backup
-	secret, err := osm.NewCephSecret(r.client, backup.OSMSecretName(), cluster.Namespace, backup.Spec.Backend)
+	secret, err := osm.NewRcloneSecret(r.client, backup.RCloneSecretName(), cluster.Namespace, backup.Spec.Backend, redisv1alpha1.DefaultOwnerReferences(cluster))
 	if err != nil {
 		return err
 	}
@@ -267,4 +267,28 @@ func isRedisConfChanged(confInCm string, currentConf map[string]string, log logr
 		}
 	}
 	return false
+}
+
+func (r *realEnsureResource) UpdateRedisStatefulsets(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) error {
+	for i := 0; i < int(cluster.Spec.MasterSize); i++ {
+		name := statefulsets.ClusterStatefulSetName(cluster.Name, i)
+		svcName := statefulsets.ClusterHeadlessSvcName(cluster.Spec.ServiceName, i)
+		// assign label
+		labels[redisv1alpha1.StatefulSetLabel] = name
+		if err := r.updateRedisStatefulset(cluster, name, svcName, labels); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *realEnsureResource) updateRedisStatefulset(cluster *redisv1alpha1.DistributedRedisCluster, ssName, svcName string,
+	labels map[string]string) error {
+	r.logger.WithValues("StatefulSet.Namespace", cluster.Namespace, "StatefulSet.Name", ssName).
+		Info("updating statefulSet immediately")
+	newSS, err := statefulsets.NewStatefulSetForCR(cluster, ssName, svcName, labels)
+	if err != nil {
+		return err
+	}
+	return r.statefulSetClient.UpdateStatefulSet(newSS)
 }

@@ -30,7 +30,7 @@ type syncContext struct {
 
 func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error {
 	cluster := ctx.cluster
-	if err := r.validate(cluster, ctx.reqLogger); err != nil {
+	if err := r.validateAndSetDefault(cluster, ctx.reqLogger); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
 			return Kubernetes.Wrap(err, "Validate")
 		}
@@ -69,9 +69,9 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisSvc(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisSvc")
 	}
-	if err := r.ensurer.EnsureRedisOSMSecret(cluster, labels); err != nil {
+	if err := r.ensurer.EnsureRedisRCloneSecret(cluster, labels); err != nil {
 		if k8sutil.IsRequestRetryable(err) {
-			return Kubernetes.Wrap(err, "EnsureRedisOSMSecret")
+			return Kubernetes.Wrap(err, "EnsureRedisRCloneSecret")
 		}
 		return StopRetry.Wrap(err, "stop retry")
 	}
@@ -89,16 +89,22 @@ func (r *ReconcileDistributedRedisCluster) waitPodReady(ctx *syncContext) error 
 	return nil
 }
 
-func (r *ReconcileDistributedRedisCluster) validate(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
+func (r *ReconcileDistributedRedisCluster) validateAndSetDefault(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) error {
 	var update bool
 	var err error
 
-	if cluster.IsRestoreFromBackup() && !cluster.IsRestored() {
-		update, err = r.validateRestore(cluster, reqLogger)
+	if cluster.IsRestoreFromBackup() && cluster.ShouldInitRestorePhase() {
+		update, err = r.initRestore(cluster, reqLogger)
 		if err != nil {
 			return err
 		}
 	}
+
+	if cluster.IsRestoreFromBackup() && (cluster.IsRestoreRunning() || cluster.IsRestoreRestarting()) {
+		// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
+		cluster.Spec.ClusterReplicas = 0
+	}
+
 	updateDefault := cluster.DefaultSpec(reqLogger)
 	if update || updateDefault {
 		return r.crController.UpdateCR(cluster)
@@ -116,7 +122,7 @@ func dbLoadedFromDiskWhenRestore(cluster *redisv1alpha1.DistributedRedisCluster,
 	}
 }
 
-func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileDistributedRedisCluster) initRestore(cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) (bool, error) {
 	update := false
 	if cluster.Status.Restore.Backup == nil {
 		initSpec := cluster.Spec.Init
@@ -130,6 +136,10 @@ func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha
 			return update, fmt.Errorf("backup is still running")
 		}
 		cluster.Status.Restore.Backup = backup
+		cluster.Status.Restore.Phase = redisv1alpha1.RestorePhaseRunning
+		if err := r.crController.UpdateCRStatus(cluster); err != nil {
+			return update, err
+		}
 	}
 	backup := cluster.Status.Restore.Backup
 	if cluster.Spec.Image == "" {
@@ -140,8 +150,7 @@ func (r *ReconcileDistributedRedisCluster) validateRestore(cluster *redisv1alpha
 		cluster.Spec.MasterSize = backup.Status.MasterSize
 		update = true
 	}
-	// Set ClusterReplicas = 0, only start master node in first reconcile loop when do restore
-	cluster.Spec.ClusterReplicas = 0
+
 	return update, nil
 }
 

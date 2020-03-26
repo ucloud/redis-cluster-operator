@@ -4,21 +4,24 @@ require (
 	github.com/appscode/go v0.0.0-20191006073906-e3d193d493fc
 	github.com/appscode/osm v0.12.0
 	github.com/aws/aws-sdk-go v1.20.20
-	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.2
+	github.com/go-redis/redis v6.15.7+incompatible
 	github.com/mediocregopher/radix.v2 v0.0.0-20181115013041-b67df6e626f9
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	github.com/operator-framework/operator-sdk v0.13.0
 	github.com/pkg/errors v0.8.1
+	github.com/satori/go.uuid v1.2.0
 	github.com/spf13/pflag v1.0.5
+	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	gomodules.xyz/stow v0.2.3
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.16.2
+	kmodules.xyz/constants v0.0.0-20191024095500-cd4313df4aa6
 	kmodules.xyz/objectstore-api v0.0.0-20191014210450-ac380fa650a3
 	sigs.k8s.io/controller-runtime v0.4.0
 )

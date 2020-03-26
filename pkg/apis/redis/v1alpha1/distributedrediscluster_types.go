@@ -116,10 +116,8 @@ type DistributedRedisClusterStatus struct {
 }
 
 type Restore struct {
-	// The number of restore which reached phase Succeeded.
-	RestoreSucceeded int32               `json:"restoreSucceeded,omitempty"`
-	Backup           *RedisClusterBackup `json:"backup, omitempty"`
-	//BackupSourceSpec `json:",inline"`
+	Phase  RestorePhase        `json:"phase,omitempty"`
+	Backup *RedisClusterBackup `json:"backup, omitempty"`
 }
 
 // RedisClusterNode represent a RedisCluster Node

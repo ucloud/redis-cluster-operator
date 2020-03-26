@@ -70,7 +70,19 @@ func (in *DistributedRedisCluster) IsRestoreFromBackup() bool {
 }
 
 func (in *DistributedRedisCluster) IsRestored() bool {
-	return in.Status.Restore.RestoreSucceeded > 0
+	return in.Status.Restore.Phase == RestorePhaseSucceeded
+}
+
+func (in *DistributedRedisCluster) ShouldInitRestorePhase() bool {
+	return in.Status.Restore.Phase == ""
+}
+
+func (in *DistributedRedisCluster) IsRestoreRunning() bool {
+	return in.Status.Restore.Phase == RestorePhaseRunning
+}
+
+func (in *DistributedRedisCluster) IsRestoreRestarting() bool {
+	return in.Status.Restore.Phase == RestorePhaseRestart
 }
 
 func defaultResource() *v1.ResourceRequirements {
@@ -114,7 +126,7 @@ func (in *RedisClusterBackup) Validate() error {
 	return nil
 }
 
-func (in *RedisClusterBackup) Location() (string, error) {
+func (in *RedisClusterBackup) RemotePath() (string, error) {
 	spec := in.Spec.Backend
 	timePrefix := in.Status.StartTime.Format("20060102150405")
 	if spec.S3 != nil {
@@ -131,10 +143,14 @@ func (in *RedisClusterBackup) Location() (string, error) {
 	return "", fmt.Errorf("no storage provider is configured")
 }
 
-func (in *RedisClusterBackup) OSMSecretName() string {
-	return fmt.Sprintf("osmconfig-%v", in.Name)
+func (in *RedisClusterBackup) RCloneSecretName() string {
+	return fmt.Sprintf("rcloneconfig-%v", in.Name)
 }
 
 func (in *RedisClusterBackup) JobName() string {
 	return fmt.Sprintf("redisbackup-%v", in.Name)
+}
+
+func (in *RedisClusterBackup) IsRefLocalPVC() bool {
+	return in.Spec.Local != nil && in.Spec.Local.PersistentVolumeClaim != nil
 }

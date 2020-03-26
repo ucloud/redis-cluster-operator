@@ -144,7 +144,7 @@ func compareStatus(old, new *redisv1alpha1.DistributedRedisClusterStatus, reqLog
 		return true
 	}
 
-	if utils.CompareInt32("restoreSucceeded", old.Restore.RestoreSucceeded, new.Restore.RestoreSucceeded, reqLogger) {
+	if utils.CompareStringValue("restoreSucceeded", string(old.Restore.Phase), string(new.Restore.Phase), reqLogger) {
 		return true
 	}
 

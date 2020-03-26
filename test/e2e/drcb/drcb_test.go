@@ -8,6 +8,12 @@ import (
 	"github.com/ucloud/redis-cluster-operator/test/e2e"
 )
 
+var (
+	goredis *e2e.GoRedis
+	dbsize  int64
+	err     error
+)
+
 var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func() {
 	It("should create a DistributedRedisCluster", func() {
 		name := e2e.RandString(8)
@@ -16,6 +22,11 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 		Ω(f.CreateRedisClusterPassword(password)).Should(Succeed())
 		Ω(f.CreateRedisCluster(drc)).Should(Succeed())
 		Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+		goredis = e2e.NewGoRedisClient(name, f.Namespace(), password)
+		Expect(goredis.StuffingData(10, 300000)).NotTo(HaveOccurred())
+		dbsize, err = goredis.DBSize()
+		Expect(err).NotTo(HaveOccurred())
+		f.Logf("%s DBSIZE: %d", name, dbsize)
 	})
 
 	Context("when the DistributedRedisCluster is created", func() {
@@ -29,6 +40,7 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 			Ω(f.CreateS3Secret(s3ID, s3Key)).Should(Succeed())
 			Ω(f.CreateRedisClusterBackup(drcb)).Should(Succeed())
 			Eventually(e2e.IsRedisClusterBackupProperly(f, drcb), "10m", "10s").ShouldNot(HaveOccurred())
+			Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 		})
 		Context("when the RedisClusterBackup is created", func() {
 			It("should restore from backup", func() {
@@ -36,33 +48,45 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 				rdrc = e2e.RestoreDRC(drc, drcb)
 				Ω(f.CreateRedisCluster(rdrc)).Should(Succeed())
 				Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+				goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
+				Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 			})
 			Context("when restore is succeeded", func() {
 				It("should change redis config for a DistributedRedisCluster", func() {
 					e2e.ChangeDRCRedisConfig(rdrc)
 					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 				})
 				It("should recover from accidentally deleting master pods", func() {
 					e2e.DeleteMasterPodForDRC(rdrc, f.Client)
+					Eventually(e2e.IsDRCPodBeDeleted(f, rdrc), "5m", "10s").ShouldNot(HaveOccurred())
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+					goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
+					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 				})
 				It("should scale up a DistributedRedisCluster", func() {
 					e2e.ScaleUPDRC(rdrc)
 					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+					goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
+					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 				})
 				Context("when the scale up succeeded", func() {
 					It("should scale down a DistributedRedisCluster", func() {
 						e2e.ScaleUPDown(rdrc)
 						Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
 						Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+						goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
+						Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 					})
 				})
 				It("should update the DistributedRedisCluster minor version", func() {
 					e2e.RollingUpdateDRC(rdrc)
 					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
+					goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), goredis.Password())
+					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 				})
 			})
 		})
