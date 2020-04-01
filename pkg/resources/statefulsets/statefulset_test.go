@@ -3,6 +3,8 @@ package statefulsets
 import (
 	"reflect"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 func Test_mergeRenameCmds(t *testing.T) {
@@ -85,6 +87,90 @@ func Test_mergeRenameCmds(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := mergeRenameCmds(tt.args.userCmds, tt.args.systemRenameCmdMap); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("mergeRenameCmds() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_customContainerEnv(t *testing.T) {
+	type args struct {
+		env       []corev1.EnvVar
+		customEnv []corev1.EnvVar
+	}
+	tests := []struct {
+		name string
+		args args
+		want []corev1.EnvVar
+	}{
+		{
+			name: "nil all",
+			args: args{
+				env:       nil,
+				customEnv: nil,
+			},
+			want: nil,
+		},
+		{
+			name: "nil env",
+			args: args{
+				env: nil,
+				customEnv: []corev1.EnvVar{{
+					Name:      "foo",
+					Value:     "",
+					ValueFrom: nil,
+				}},
+			},
+			want: []corev1.EnvVar{{
+				Name:      "foo",
+				Value:     "",
+				ValueFrom: nil,
+			}},
+		},
+		{
+			name: "nil custom env",
+			args: args{
+				customEnv: nil,
+				env: []corev1.EnvVar{{
+					Name:      "foo",
+					Value:     "",
+					ValueFrom: nil,
+				}},
+			},
+			want: []corev1.EnvVar{{
+				Name:      "foo",
+				Value:     "",
+				ValueFrom: nil,
+			}},
+		},
+		{
+			name: "env for bar",
+			args: args{
+				env: []corev1.EnvVar{{
+					Name:      "foo",
+					Value:     "",
+					ValueFrom: nil,
+				}},
+				customEnv: []corev1.EnvVar{{
+					Name:      "bar",
+					Value:     "",
+					ValueFrom: nil,
+				}},
+			},
+			want: []corev1.EnvVar{{
+				Name:      "foo",
+				Value:     "",
+				ValueFrom: nil,
+			}, {
+				Name:      "bar",
+				Value:     "",
+				ValueFrom: nil,
+			}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := customContainerEnv(tt.args.env, tt.args.customEnv); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("customContainerEnv() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -15,22 +15,25 @@ type DistributedRedisClusterSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	Image           string                       `json:"image,omitempty"`
-	Command         []string                     `json:"command,omitempty"`
-	MasterSize      int32                        `json:"masterSize,omitempty"`
-	ClusterReplicas int32                        `json:"clusterReplicas,omitempty"`
-	ServiceName     string                       `json:"serviceName,omitempty"`
-	Config          map[string]string            `json:"config,omitempty"`
-	Affinity        *corev1.Affinity             `json:"affinity,omitempty"`
-	NodeSelector    map[string]string            `json:"nodeSelector,omitempty"`
-	ToleRations     []corev1.Toleration          `json:"toleRations,omitempty"`
-	SecurityContext *corev1.PodSecurityContext   `json:"securityContext,omitempty"`
-	Annotations     map[string]string            `json:"annotations,omitempty"`
-	Storage         *RedisStorage                `json:"storage,omitempty"`
-	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
-	PasswordSecret  *corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
-	Monitor         *AgentSpec                   `json:"monitor,omitempty"`
-	Init            *InitSpec                    `json:"init,omitempty"`
+	Image            string                        `json:"image,omitempty"`
+	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Command          []string                      `json:"command,omitempty"`
+	Env              []corev1.EnvVar               `json:"env,omitempty"`
+	MasterSize       int32                         `json:"masterSize,omitempty"`
+	ClusterReplicas  int32                         `json:"clusterReplicas,omitempty"`
+	ServiceName      string                        `json:"serviceName,omitempty"`
+	Config           map[string]string             `json:"config,omitempty"`
+	Affinity         *corev1.Affinity              `json:"affinity,omitempty"`
+	NodeSelector     map[string]string             `json:"nodeSelector,omitempty"`
+	ToleRations      []corev1.Toleration           `json:"toleRations,omitempty"`
+	SecurityContext  *corev1.PodSecurityContext    `json:"securityContext,omitempty"`
+	Annotations      map[string]string             `json:"annotations,omitempty"`
+	Storage          *RedisStorage                 `json:"storage,omitempty"`
+	Resources        *corev1.ResourceRequirements  `json:"resources,omitempty"`
+	PasswordSecret   *corev1.LocalObjectReference  `json:"passwordSecret,omitempty"`
+	Monitor          *AgentSpec                    `json:"monitor,omitempty"`
+	Init             *InitSpec                     `json:"init,omitempty"`
 }
 
 type AgentSpec struct {

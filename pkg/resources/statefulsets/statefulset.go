@@ -268,6 +268,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		container.Env = append(container.Env, *password)
 	}
 
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
+
 	return container
 }
 
@@ -294,6 +296,9 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 	if password != nil {
 		container.Env = append(container.Env, *password)
 	}
+
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
+
 	return container
 }
 
@@ -375,7 +380,14 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password
 		container.Lifecycle = backup.Spec.PodSpec.Lifecycle
 	}
 
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
+
 	return container, nil
+}
+
+func customContainerEnv(env []corev1.EnvVar, customEnv []corev1.EnvVar) []corev1.EnvVar {
+	env = append(env, customEnv...)
+	return env
 }
 
 func volumeMounts() []corev1.VolumeMount {
