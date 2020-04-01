@@ -198,7 +198,7 @@ func mergeRenameCmds(userCmds []string, systemRenameCmdMap map[string]string) []
 }
 
 func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
-	probeArg := "redis-cli -h $(hostname)"
+	probeArg := "redis-cli -h $(hostname) ping"
 
 	container := corev1.Container{
 		Name:  redisServerName,
