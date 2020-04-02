@@ -60,10 +60,11 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 					Annotations: cluster.Spec.Annotations,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:        getAffinity(spec.Affinity, labels),
-					Tolerations:     spec.ToleRations,
-					SecurityContext: spec.SecurityContext,
-					NodeSelector:    cluster.Spec.NodeSelector,
+					ImagePullSecrets: cluster.Spec.ImagePullSecrets,
+					Affinity:         getAffinity(spec.Affinity, labels),
+					Tolerations:      spec.ToleRations,
+					SecurityContext:  spec.SecurityContext,
+					NodeSelector:     cluster.Spec.NodeSelector,
 					Containers: []corev1.Container{
 						redisServerContainer(cluster, password),
 					},
@@ -201,8 +202,9 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 	probeArg := "redis-cli -h $(hostname) ping"
 
 	container := corev1.Container{
-		Name:  redisServerName,
-		Image: cluster.Spec.Image,
+		Name:            redisServerName,
+		Image:           cluster.Spec.Image,
+		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "client",
