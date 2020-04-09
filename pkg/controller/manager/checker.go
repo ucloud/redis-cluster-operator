@@ -49,6 +49,9 @@ func (c *realCheck) checkRedisNodeNum(expectNodeNum int32, ss *appsv1.StatefulSe
 	if expectNodeNum != ss.Status.ReadyReplicas {
 		return fmt.Errorf("redis pods are not all ready")
 	}
+	if expectNodeNum != ss.Status.CurrentReplicas {
+		return fmt.Errorf("redis pods need to be updated")
+	}
 
 	return nil
 }
