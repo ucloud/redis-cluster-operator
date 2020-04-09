@@ -16,11 +16,12 @@ const (
 // RedisClusterBackupSpec defines the desired state of RedisClusterBackup
 // +k8s:openapi-gen=true
 type RedisClusterBackupSpec struct {
-	Image            string        `json:"image,omitempty"`
-	RedisClusterName string        `json:"redisClusterName"`
-	Storage          *RedisStorage `json:"storage,omitempty"`
-	store.Backend    `json:",inline"`
-	PodSpec          *PodSpec `json:"podSpec,omitempty"`
+	Image                 string        `json:"image,omitempty"`
+	RedisClusterName      string        `json:"redisClusterName"`
+	Storage               *RedisStorage `json:"storage,omitempty"`
+	store.Backend         `json:",inline"`
+	PodSpec               *PodSpec `json:"podSpec,omitempty"`
+	ActiveDeadlineSeconds *int64   `json:"activeDeadlineSeconds,omitempty"`
 }
 
 type PodSpec struct {

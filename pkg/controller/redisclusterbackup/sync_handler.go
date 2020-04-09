@@ -243,6 +243,7 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 			},
 		},
 		Spec: batchv1.JobSpec{
+			ActiveDeadlineSeconds: backup.Spec.ActiveDeadlineSeconds,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: containers,
