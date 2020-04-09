@@ -24,6 +24,7 @@ import (
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
@@ -208,7 +209,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	password, err := getClusterPassword(r.client, instance)
+	password, err := statefulsets.GetClusterPassword(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}

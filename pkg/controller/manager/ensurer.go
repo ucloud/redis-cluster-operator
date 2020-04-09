@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -101,15 +100,9 @@ func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *apps
 	if cluster.Spec.Image != sts.Spec.Template.Spec.Containers[0].Image {
 		return true
 	}
-	if cluster.Spec.PasswordSecret != nil {
-		envSet := sts.Spec.Template.Spec.Containers[0].Env
-		secretName := getSecretKeyRefByKey(redisv1alpha1.PasswordENV, envSet)
-		if secretName == "" {
-			return true
-		}
-		if secretName != cluster.Spec.PasswordSecret.Name {
-			return true
-		}
+
+	if statefulsets.IsPasswordChanged(cluster, sts) {
+		return true
 	}
 
 	expectResource := cluster.Spec.Resources
@@ -127,17 +120,6 @@ func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *apps
 		return true
 	}
 	return false
-}
-
-func getSecretKeyRefByKey(key string, envSet []corev1.EnvVar) string {
-	for _, value := range envSet {
-		if key == value.Name {
-			if value.ValueFrom != nil && value.ValueFrom.SecretKeyRef != nil {
-				return value.ValueFrom.SecretKeyRef.Name
-			}
-		}
-	}
-	return ""
 }
 
 func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {

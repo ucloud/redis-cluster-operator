@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/clustering"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
@@ -45,6 +46,11 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
+
+	if err := r.resetClusterPassword(ctx); err != nil {
+		return Cluster.Wrap(err, "ResetPassword")
+	}
+
 	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, labels); err != nil {
 		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
@@ -303,6 +309,48 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 			ctx.reqLogger.Error(err, "waitPodTerminating")
 		}
 
+	}
+	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext) error {
+	if err := r.checker.CheckRedisNodeNum(ctx.cluster); err == nil {
+		namespace := ctx.cluster.Namespace
+		name := ctx.cluster.Name
+		sts, err := r.statefulSetController.GetStatefulSet(namespace, statefulsets.ClusterStatefulSetName(name, 0))
+		if err != nil {
+			return err
+		}
+
+		if !statefulsets.IsPasswordChanged(ctx.cluster, sts) {
+			return nil
+		}
+
+		matchLabels := getLabels(ctx.cluster)
+		redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(namespace, matchLabels)
+		if err != nil {
+			return err
+		}
+
+		oldPassword, err := statefulsets.GetOldRedisClusterPassword(r.client, sts)
+		if err != nil {
+			return err
+		}
+
+		newPassword, err := statefulsets.GetClusterPassword(r.client, ctx.cluster)
+		if err != nil {
+			return err
+		}
+
+		admin, err := newRedisAdmin(clusterPods(redisClusterPods.Items), oldPassword, config.RedisConf(), ctx.reqLogger)
+		if err != nil {
+			return err
+		}
+		defer admin.Close()
+
+		if err := admin.ResetPassword(newPassword); err != nil {
+			return err
+		}
 	}
 	return nil
 }
