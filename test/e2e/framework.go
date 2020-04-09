@@ -114,8 +114,7 @@ func (f *Framework) CreateRedisClusterBackup(instance *redisv1alpha1.RedisCluste
 }
 
 // CreateRedisClusterPassword creates a password for DistributedRedisCluster
-func (f *Framework) CreateRedisClusterPassword(password string) error {
-	name := f.PasswordName()
+func (f *Framework) CreateRedisClusterPassword(name, password string) error {
 	f.Logf("Creating DistributedRedisCluster secret %s", name)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -274,6 +273,10 @@ func (f *Framework) roleName() string {
 
 func (f *Framework) PasswordName() string {
 	return fmt.Sprintf("redis-admin-passwd")
+}
+
+func (f *Framework) NewPasswordName() string {
+	return fmt.Sprintf("redis-admin-newpasswd")
 }
 
 func (f *Framework) S3SecretName() string {

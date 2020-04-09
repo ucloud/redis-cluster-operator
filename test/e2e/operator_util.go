@@ -247,6 +247,10 @@ func ScaleUPDown(drc *redisv1alpha1.DistributedRedisCluster) {
 	drc.Spec.MasterSize = 3
 }
 
+func ResetPassword(drc *redisv1alpha1.DistributedRedisCluster, passwordSecret string) {
+	drc.Spec.PasswordSecret = &corev1.LocalObjectReference{Name: passwordSecret}
+}
+
 func RollingUpdateDRC(drc *redisv1alpha1.DistributedRedisCluster) {
 	drc.Spec.Image = Redis5_0_6
 }
