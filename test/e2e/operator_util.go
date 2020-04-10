@@ -137,6 +137,10 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 				return LogAndReturnErrorf("DistributedRedisCluster %s wrong ready replicas, want: %d, got: %d",
 					drc.Name, drc.Spec.ClusterReplicas+1, sts.Status.ReadyReplicas)
 			}
+			if sts.Status.CurrentReplicas != (drc.Spec.ClusterReplicas + 1) {
+				return LogAndReturnErrorf("DistributedRedisCluster %s wrong current replicas, want: %d, got: %d",
+					drc.Name, drc.Spec.ClusterReplicas+1, sts.Status.ReadyReplicas)
+			}
 		}
 
 		password, err := getClusterPassword(f.Client, drc)

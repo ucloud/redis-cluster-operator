@@ -2,9 +2,11 @@ package drcb_test
 
 import (
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"github.com/ucloud/redis-cluster-operator/test/e2e"
 )
 
@@ -86,6 +88,7 @@ var _ = Describe("Restore DistributedRedisCluster From RedisClusterBackup", func
 					Ω(f.CreateRedisClusterPassword(f.NewPasswordName(), newPassword)).Should(Succeed())
 					e2e.ResetPassword(rdrc, f.NewPasswordName())
 					Ω(f.UpdateRedisCluster(rdrc)).Should(Succeed())
+					time.Sleep(5 * time.Second)
 					Eventually(e2e.IsDistributedRedisClusterProperly(f, rdrc), "10m", "10s").ShouldNot(HaveOccurred())
 					goredis = e2e.NewGoRedisClient(rdrc.Name, f.Namespace(), newPassword)
 					Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
