@@ -532,12 +532,12 @@ func (a *Admin) ResetPassword(newPassword string) error {
 	}
 	for addr, c := range a.Connections().GetAll() {
 		a.log.Info("reset password", "addr", addr)
-		setPasswdResp := c.Cmd("CONFIG", "SET", "requirepass", newPassword)
-		if err := a.Connections().ValidateResp(setPasswdResp, addr, "cannot set new requirepass"); err != nil {
-			return err
-		}
 		setMasterauth := c.Cmd("CONFIG", "SET", "masterauth", newPassword)
 		if err := a.Connections().ValidateResp(setMasterauth, addr, "cannot set new masterauth"); err != nil {
+			return err
+		}
+		setPasswdResp := c.Cmd("CONFIG", "SET", "requirepass", newPassword)
+		if err := a.Connections().ValidateResp(setPasswdResp, addr, "cannot set new requirepass"); err != nil {
 			return err
 		}
 	}

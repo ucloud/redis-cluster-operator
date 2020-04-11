@@ -29,9 +29,13 @@ failover() {
     echo "Master: ${masterID}"
     slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk 'NR==1{print $2}' | sed 's/:6379@16379//')
     echo "Slave: ${slave}"
-    redis-cli -h ${slave} -a "${REDIS_PASSWORD}" CLUSTER FAILOVER
-	echo "Wait for MASTER <-> SLAVE syncFinished"
-	sleep 20
+    if [[ -z "${REDIS_PASSWORD}" ]]; then
+        redis-cli -h ${slave} CLUSTER FAILOVER
+    else
+        redis-cli -h ${slave} -a "${REDIS_PASSWORD}" CLUSTER FAILOVER
+    fi
+    echo "Wait for MASTER <-> SLAVE syncFinished"
+    sleep 20
 }
 if [ -f ${CLUSTER_CONFIG} ]; then
     cat ${CLUSTER_CONFIG} | grep "myself" | grep "master" && \
