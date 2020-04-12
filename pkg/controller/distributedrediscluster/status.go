@@ -38,6 +38,11 @@ func SetClusterUpdating(status *redisv1alpha1.DistributedRedisClusterStatus, rea
 	status.Reason = reason
 }
 
+func SetClusterResetPassword(status *redisv1alpha1.DistributedRedisClusterStatus, reason string) {
+	status.Status = redisv1alpha1.ClusterStatusResetPassword
+	status.Reason = reason
+}
+
 func buildClusterStatus(clusterInfos *redisutil.ClusterInfos, pods []*corev1.Pod,
 	cluster *redisv1alpha1.DistributedRedisCluster, reqLogger logr.Logger) *redisv1alpha1.DistributedRedisClusterStatus {
 	oldStatus := cluster.Status

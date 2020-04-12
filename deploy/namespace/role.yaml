@@ -19,6 +19,7 @@ rules:
       - ""
     resources:
       - configmaps
+      - pods/exec
       - secrets
       - services
       - events

@@ -45,6 +45,8 @@ const (
 	ClusterStatusRebalancing ClusterStatus = "Rebalancing"
 	// ClusterStatusRollingUpdate ClusterStatus RollingUpdate
 	ClusterStatusRollingUpdate ClusterStatus = "RollingUpdate"
+	// ClusterStatusResetPassword ClusterStatus ResetPassword
+	ClusterStatusResetPassword ClusterStatus = "ResetPassword"
 )
 
 // NodesPlacementInfo Redis Nodes placement mode information

@@ -258,6 +258,11 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Resources: *cluster.Spec.Resources,
 		// TODO store redis data when pod stop
 		Lifecycle: &corev1.Lifecycle{
+			PostStart: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "-c", "echo ${REDIS_PASSWORD} > /etc/redis_password"},
+				},
+			},
 			PreStop: &corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/sh", "/conf/shutdown.sh"},

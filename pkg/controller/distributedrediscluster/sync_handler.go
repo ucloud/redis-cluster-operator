@@ -326,6 +326,9 @@ func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext
 			return nil
 		}
 
+		SetClusterResetPassword(&ctx.cluster.Status, "updating cluster's password")
+		r.crController.UpdateCRStatus(ctx.cluster)
+
 		matchLabels := getLabels(ctx.cluster)
 		redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(namespace, matchLabels)
 		if err != nil {
@@ -342,12 +345,21 @@ func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext
 			return err
 		}
 
-		admin, err := newRedisAdmin(clusterPods(redisClusterPods.Items), oldPassword, config.RedisConf(), ctx.reqLogger)
+		podSet := clusterPods(redisClusterPods.Items)
+		admin, err := newRedisAdmin(podSet, oldPassword, config.RedisConf(), ctx.reqLogger)
 		if err != nil {
 			return err
 		}
 		defer admin.Close()
 
+		// Update the password recorded in the file /etc/redis_password, redis pod preStop hook
+		// need /etc/redis_password do CLUSTER FAILOVER
+		cmd := fmt.Sprintf("echo %s > /etc/redis_password", newPassword)
+		if err := r.execer.ExecCommandInPodSet(podSet, "/bin/sh", "-c", cmd); err != nil {
+			return err
+		}
+
+		// Reset all redis pod's password.
 		if err := admin.ResetPassword(newPassword); err != nil {
 			return err
 		}
