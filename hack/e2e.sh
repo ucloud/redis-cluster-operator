@@ -24,6 +24,8 @@ if [[ -z $TEST_TIMEOUT ]]; then
 fi
 
 echo "run e2e tests..."
-echo "cd ${GOPATH}/src/${REPO_PATH} && ginkgo -v --skip=${GINKGO_SKIP} --timeout=${TEST_TIMEOUT} test/e2e/... -- --rename-command-path=${GOPATH}/src/${REPO_PATH}/test/e2e --rename-command-file=rename.conf"
-cd ${GOPATH}/src/${REPO_PATH} && ginkgo -v --skip=${GINKGO_SKIP} --timeout=${TEST_TIMEOUT} test/e2e/... -- --rename-command-path=${GOPATH}/src/${REPO_PATH}/test/e2e --rename-command-file=rename.conf
+e2ecmd="cd ${GOPATH}/src/${REPO_PATH} && ginkgo -v --mod=vendor --failFast --skip=${GINKGO_SKIP} --timeout=${TEST_TIMEOUT} test/e2e/... -- --rename-command-path=${GOPATH}/src/${REPO_PATH}/test/e2e --rename-command-file=rename.conf"
+echo "${e2ecmd}"
+eval "${e2ecmd}"
+
 

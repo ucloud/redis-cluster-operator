@@ -1,6 +1,8 @@
 package drc_test
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -18,7 +20,7 @@ var _ = Describe("DistributedRedisCluster CRUD", func() {
 		name := e2e.RandString(8)
 		password := e2e.RandString(8)
 		drc = e2e.NewDistributedRedisCluster(name, f.Namespace(), e2e.Redis5_0_4, f.PasswordName(), 3, 1)
-		Ω(f.CreateRedisClusterPassword(password)).Should(Succeed())
+		Ω(f.CreateRedisClusterPassword(f.PasswordName(), password)).Should(Succeed())
 		Ω(f.CreateRedisCluster(drc)).Should(Succeed())
 		Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
 		goredis = e2e.NewGoRedisClient(name, f.Namespace(), password)
@@ -57,6 +59,16 @@ var _ = Describe("DistributedRedisCluster CRUD", func() {
 				goredis = e2e.NewGoRedisClient(drc.Name, f.Namespace(), goredis.Password())
 				Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 			})
+		})
+		It("should reset the DistributedRedisCluster password", func() {
+			newPassword := e2e.RandString(8)
+			Ω(f.CreateRedisClusterPassword(f.NewPasswordName(), newPassword)).Should(Succeed())
+			e2e.ResetPassword(drc, f.NewPasswordName())
+			Ω(f.UpdateRedisCluster(drc)).Should(Succeed())
+			time.Sleep(5 * time.Second)
+			Eventually(e2e.IsDistributedRedisClusterProperly(f, drc), "10m", "10s").ShouldNot(HaveOccurred())
+			goredis = e2e.NewGoRedisClient(drc.Name, f.Namespace(), newPassword)
+			Expect(e2e.IsDBSizeConsistent(dbsize, goredis)).NotTo(HaveOccurred())
 		})
 		It("should update the DistributedRedisCluster minor version", func() {
 			e2e.RollingUpdateDRC(drc)

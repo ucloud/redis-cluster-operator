@@ -8,7 +8,11 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -22,8 +26,10 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/heal"
 	clustermanger "github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
+	"github.com/ucloud/redis-cluster-operator/pkg/exec"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/redisutil"
+	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
@@ -55,11 +61,22 @@ func FlagSet() *pflag.FlagSet {
 // Add creates a new DistributedRedisCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	gvk := runtimeschema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "Pod",
+	}
+	restClient, err := apiutil.RESTClientForGVK(gvk, mgr.GetConfig(), serializer.NewCodecFactory(scheme.Scheme))
+	if err != nil {
+		return err
+	}
+	execer := exec.NewRemoteExec(restClient, mgr.GetConfig(), log)
+
+	return add(mgr, newReconciler(mgr, execer))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, execer exec.IExec) reconcile.Reconciler {
 	reconiler := &ReconcileDistributedRedisCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 	reconiler.statefulSetController = k8sutil.NewStatefulSetController(reconiler.client)
 	reconiler.serviceController = k8sutil.NewServiceController(reconiler.client)
@@ -68,6 +85,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	reconiler.crController = k8sutil.NewCRControl(reconiler.client)
 	reconiler.ensurer = clustermanger.NewEnsureResource(reconiler.client, log)
 	reconiler.checker = clustermanger.NewCheck(reconiler.client)
+	reconiler.execer = execer
 	return reconiler
 }
 
@@ -136,6 +154,7 @@ type ReconcileDistributedRedisCluster struct {
 	scheme                *runtime.Scheme
 	ensurer               clustermanger.IEnsureResource
 	checker               clustermanger.ICheck
+	execer                exec.IExec
 	statefulSetController k8sutil.IStatefulSetControl
 	serviceController     k8sutil.IServiceControl
 	pdbController         k8sutil.IPodDisruptionBudgetControl
@@ -208,7 +227,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	password, err := getClusterPassword(r.client, instance)
+	password, err := statefulsets.GetClusterPassword(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}

@@ -1,15 +1,12 @@
 package distributedrediscluster
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/config"
@@ -24,28 +21,11 @@ var (
 	}
 )
 
-const passwordKey = "password"
-
 func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string {
 	dynLabels := map[string]string{
 		redisv1alpha1.LabelClusterName: cluster.Name,
 	}
 	return utils.MergeLabels(defaultLabels, dynLabels, cluster.Labels)
-}
-
-func getClusterPassword(client client.Client, cluster *redisv1alpha1.DistributedRedisCluster) (string, error) {
-	if cluster.Spec.PasswordSecret == nil {
-		return "", nil
-	}
-	secret := &corev1.Secret{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Name:      cluster.Spec.PasswordSecret.Name,
-		Namespace: cluster.Namespace,
-	}, secret)
-	if err != nil {
-		return "", err
-	}
-	return string(secret.Data[passwordKey]), nil
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods

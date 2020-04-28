@@ -71,6 +71,8 @@ type IAdmin interface {
 	FlushAndReset(addr string, mode string) error
 	// GetHashMaxSlot get the max slot value
 	GetHashMaxSlot() Slot
+	// ResetPassword reset redis node masterauth and requirepass.
+	ResetPassword(newPassword string) error
 }
 
 // AdminOptions optional options for redis admin
@@ -519,5 +521,25 @@ func (a *Admin) FlushAndReset(addr string, mode string) error {
 		return fmt.Errorf("Cannot reset node %s", addr)
 	}
 
+	return nil
+}
+
+// ResetPassword reset redis node masterauth and requirepass.
+func (a *Admin) ResetPassword(newPassword string) error {
+	all := a.Connections().GetAll()
+	if len(all) == 0 {
+		return fmt.Errorf("no connection for other redis-node found")
+	}
+	for addr, c := range a.Connections().GetAll() {
+		a.log.Info("reset password", "addr", addr)
+		setMasterauth := c.Cmd("CONFIG", "SET", "masterauth", newPassword)
+		if err := a.Connections().ValidateResp(setMasterauth, addr, "cannot set new masterauth"); err != nil {
+			return err
+		}
+		setPasswdResp := c.Cmd("CONFIG", "SET", "requirepass", newPassword)
+		if err := a.Connections().ValidateResp(setPasswdResp, addr, "cannot set new requirepass"); err != nil {
+			return err
+		}
+	}
 	return nil
 }

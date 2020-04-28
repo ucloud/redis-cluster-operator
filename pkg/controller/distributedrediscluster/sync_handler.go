@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
+	"github.com/ucloud/redis-cluster-operator/pkg/config"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/clustering"
 	"github.com/ucloud/redis-cluster-operator/pkg/controller/manager"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
@@ -45,6 +46,11 @@ func (r *ReconcileDistributedRedisCluster) ensureCluster(ctx *syncContext) error
 	if err := r.ensurer.EnsureRedisConfigMap(cluster, labels); err != nil {
 		return Kubernetes.Wrap(err, "EnsureRedisConfigMap")
 	}
+
+	if err := r.resetClusterPassword(ctx); err != nil {
+		return Cluster.Wrap(err, "ResetPassword")
+	}
+
 	if updated, err := r.ensurer.EnsureRedisStatefulsets(cluster, labels); err != nil {
 		ctx.reqLogger.Error(err, "EnsureRedisStatefulSets")
 		return Kubernetes.Wrap(err, "EnsureRedisStatefulSets")
@@ -303,6 +309,60 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 			ctx.reqLogger.Error(err, "waitPodTerminating")
 		}
 
+	}
+	return nil
+}
+
+func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext) error {
+	if err := r.checker.CheckRedisNodeNum(ctx.cluster); err == nil {
+		namespace := ctx.cluster.Namespace
+		name := ctx.cluster.Name
+		sts, err := r.statefulSetController.GetStatefulSet(namespace, statefulsets.ClusterStatefulSetName(name, 0))
+		if err != nil {
+			return err
+		}
+
+		if !statefulsets.IsPasswordChanged(ctx.cluster, sts) {
+			return nil
+		}
+
+		SetClusterResetPassword(&ctx.cluster.Status, "updating cluster's password")
+		r.crController.UpdateCRStatus(ctx.cluster)
+
+		matchLabels := getLabels(ctx.cluster)
+		redisClusterPods, err := r.statefulSetController.GetStatefulSetPodsByLabels(namespace, matchLabels)
+		if err != nil {
+			return err
+		}
+
+		oldPassword, err := statefulsets.GetOldRedisClusterPassword(r.client, sts)
+		if err != nil {
+			return err
+		}
+
+		newPassword, err := statefulsets.GetClusterPassword(r.client, ctx.cluster)
+		if err != nil {
+			return err
+		}
+
+		podSet := clusterPods(redisClusterPods.Items)
+		admin, err := newRedisAdmin(podSet, oldPassword, config.RedisConf(), ctx.reqLogger)
+		if err != nil {
+			return err
+		}
+		defer admin.Close()
+
+		// Update the password recorded in the file /etc/redis_password, redis pod preStop hook
+		// need /etc/redis_password do CLUSTER FAILOVER
+		cmd := fmt.Sprintf("echo %s > /etc/redis_password", newPassword)
+		if err := r.execer.ExecCommandInPodSet(podSet, "/bin/sh", "-c", cmd); err != nil {
+			return err
+		}
+
+		// Reset all redis pod's password.
+		if err := admin.ResetPassword(newPassword); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -137,6 +137,10 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 				return LogAndReturnErrorf("DistributedRedisCluster %s wrong ready replicas, want: %d, got: %d",
 					drc.Name, drc.Spec.ClusterReplicas+1, sts.Status.ReadyReplicas)
 			}
+			if sts.Status.CurrentReplicas != (drc.Spec.ClusterReplicas + 1) {
+				return LogAndReturnErrorf("DistributedRedisCluster %s wrong current replicas, want: %d, got: %d",
+					drc.Name, drc.Spec.ClusterReplicas+1, sts.Status.ReadyReplicas)
+			}
 		}
 
 		password, err := getClusterPassword(f.Client, drc)
@@ -245,6 +249,10 @@ func ScaleUPDRC(drc *redisv1alpha1.DistributedRedisCluster) {
 
 func ScaleUPDown(drc *redisv1alpha1.DistributedRedisCluster) {
 	drc.Spec.MasterSize = 3
+}
+
+func ResetPassword(drc *redisv1alpha1.DistributedRedisCluster, passwordSecret string) {
+	drc.Spec.PasswordSecret = &corev1.LocalObjectReference{Name: passwordSecret}
 }
 
 func RollingUpdateDRC(drc *redisv1alpha1.DistributedRedisCluster) {

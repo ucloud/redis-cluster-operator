@@ -60,10 +60,11 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 					Annotations: cluster.Spec.Annotations,
 				},
 				Spec: corev1.PodSpec{
-					Affinity:        getAffinity(spec.Affinity, labels),
-					Tolerations:     spec.ToleRations,
-					SecurityContext: spec.SecurityContext,
-					NodeSelector:    cluster.Spec.NodeSelector,
+					ImagePullSecrets: cluster.Spec.ImagePullSecrets,
+					Affinity:         getAffinity(spec.Affinity, labels),
+					Tolerations:      spec.ToleRations,
+					SecurityContext:  spec.SecurityContext,
+					NodeSelector:     cluster.Spec.NodeSelector,
 					Containers: []corev1.Container{
 						redisServerContainer(cluster, password),
 					},
@@ -201,8 +202,9 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 	probeArg := "redis-cli -h $(hostname) ping"
 
 	container := corev1.Container{
-		Name:  redisServerName,
-		Image: cluster.Spec.Image,
+		Name:            redisServerName,
+		Image:           cluster.Spec.Image,
+		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "client",
@@ -256,6 +258,11 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Resources: *cluster.Spec.Resources,
 		// TODO store redis data when pod stop
 		Lifecycle: &corev1.Lifecycle{
+			PostStart: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "-c", "echo ${REDIS_PASSWORD} > /etc/redis_password"},
+				},
+			},
 			PreStop: &corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/sh", "/conf/shutdown.sh"},
@@ -267,6 +274,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 	if password != nil {
 		container.Env = append(container.Env, *password)
 	}
+
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
 
 	return container
 }
@@ -294,6 +303,9 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 	if password != nil {
 		container.Env = append(container.Env, *password)
 	}
+
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
+
 	return container
 }
 
@@ -375,7 +387,14 @@ func redisInitContainer(cluster *redisv1alpha1.DistributedRedisCluster, password
 		container.Lifecycle = backup.Spec.PodSpec.Lifecycle
 	}
 
+	container.Env = customContainerEnv(container.Env, cluster.Spec.Env)
+
 	return container, nil
+}
+
+func customContainerEnv(env []corev1.EnvVar, customEnv []corev1.EnvVar) []corev1.EnvVar {
+	env = append(env, customEnv...)
+	return env
 }
 
 func volumeMounts() []corev1.VolumeMount {
