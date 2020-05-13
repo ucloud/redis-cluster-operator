@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+
+	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
@@ -333,6 +335,24 @@ func (a *Admin) GetAllConfig(c IClient, addr string) (map[string]string, error) 
 	return raw, nil
 }
 
+var parseConfigMap = map[string]int8{
+	"maxmemory":                  0,
+	"proto-max-bulk-len":         0,
+	"client-query-buffer-limit":  0,
+	"repl-backlog-size":          0,
+	"auto-aof-rewrite-min-size":  0,
+	"active-defrag-ignore-bytes": 0,
+	"hash-max-ziplist-entries":   0,
+	"hash-max-ziplist-value":     0,
+	"stream-node-max-bytes":      0,
+	"set-max-intset-entries":     0,
+	"zset-max-ziplist-entries":   0,
+	"zset-max-ziplist-value":     0,
+	"hll-sparse-max-bytes":       0,
+	// TODO parse client-output-buffer-limit
+	//"client-output-buffer-limit": 0,
+}
+
 // SetConfigIfNeed set redis config
 func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 	for addr, c := range a.Connections().GetAll() {
@@ -342,6 +362,14 @@ func (a *Admin) SetConfigIfNeed(newConfig map[string]string) error {
 		}
 
 		for key, value := range newConfig {
+			var err error
+			if _, ok := parseConfigMap[key]; ok {
+				value, err = utils.ParseRedisMemConf(value)
+				if err != nil {
+					a.log.Error(err, "redis config format err", "key", key, "value", value)
+					continue
+				}
+			}
 			if value != oldConfig[key] {
 				a.log.V(3).Info("CONFIG SET", key, value)
 				resp := c.Cmd("CONFIG", "SET", key, value)
