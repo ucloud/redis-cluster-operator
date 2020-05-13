@@ -24,6 +24,7 @@ const (
 	redisRestoreLocalVolumeName = "redis-local"
 	redisServerName             = "redis"
 	hostnameTopologyKey         = "kubernetes.io/hostname"
+	ExporterContainerName       = "exporter"
 
 	graceTime = 30
 
@@ -282,7 +283,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 
 func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
 	container := corev1.Container{
-		Name: "exporter",
+		Name: ExporterContainerName,
 		Args: append([]string{
 			fmt.Sprintf("--web.listen-address=:%v", cluster.Spec.Monitor.Prometheus.Port),
 			fmt.Sprintf("--web.telemetry-path=%v", redisv1alpha1.PrometheusExporterTelemetryPath),

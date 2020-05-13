@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	minMasterSize      = 3
-	minClusterReplicas = 1
-	defaultRedisImage  = "redis:5.0.4-alpine"
+	minMasterSize       = 3
+	minClusterReplicas  = 1
+	defaultRedisImage   = "redis:5.0.4-alpine"
+	defaultMonitorImage = "oliver006/redis_exporter:latest"
 )
 
 func (in *DistributedRedisCluster) DefaultSpec(log logr.Logger) bool {
@@ -41,6 +42,11 @@ func (in *DistributedRedisCluster) DefaultSpec(log logr.Logger) bool {
 
 	mon := in.Spec.Monitor
 	if mon != nil {
+		if mon.Image == "" {
+			mon.Image = defaultMonitorImage
+			update = true
+		}
+
 		if mon.Prometheus == nil {
 			mon.Prometheus = &PrometheusSpec{}
 			update = true
