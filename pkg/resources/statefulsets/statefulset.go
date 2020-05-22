@@ -62,7 +62,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets: cluster.Spec.ImagePullSecrets,
-					Affinity:         getAffinity(spec.Affinity, labels),
+					Affinity:         getAffinity(cluster, labels),
 					Tolerations:      spec.ToleRations,
 					SecurityContext:  spec.SecurityContext,
 					NodeSelector:     cluster.Spec.NodeSelector,
@@ -97,11 +97,37 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 	return ss, nil
 }
 
-func getAffinity(affinity *corev1.Affinity, labels map[string]string) *corev1.Affinity {
+func getAffinity(cluster *redisv1alpha1.DistributedRedisCluster, labels map[string]string) *corev1.Affinity {
+	affinity := cluster.Spec.Affinity
 	if affinity != nil {
 		return affinity
 	}
 
+	if cluster.Spec.RequiredAntiAffinity {
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+					{
+						Weight: 100,
+						PodAffinityTerm: corev1.PodAffinityTerm{
+							TopologyKey: hostnameTopologyKey,
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{redisv1alpha1.LabelClusterName: cluster.Name},
+							},
+						},
+					},
+				},
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					{
+						TopologyKey: hostnameTopologyKey,
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: labels,
+						},
+					},
+				},
+			},
+		}
+	}
 	// return a SOFT anti-affinity by default
 	return &corev1.Affinity{
 		PodAntiAffinity: &corev1.PodAntiAffinity{
@@ -111,7 +137,7 @@ func getAffinity(affinity *corev1.Affinity, labels map[string]string) *corev1.Af
 					PodAffinityTerm: corev1.PodAffinityTerm{
 						TopologyKey: hostnameTopologyKey,
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: labels,
+							MatchLabels: map[string]string{redisv1alpha1.LabelClusterName: cluster.Name},
 						},
 					},
 				},
