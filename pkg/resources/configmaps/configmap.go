@@ -29,7 +29,7 @@ failover() {
 	echo "Master: ${masterID}"
 	slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk 'NR==1{print $2}' | sed 's/:6379@16379//')
 	echo "Slave: ${slave}"
-	password=$(cat /etc/redis_password)
+	password=$(cat /data/redis_password)
 	if [[ -z "${password}" ]]; then
 		redis-cli -h ${slave} CLUSTER FAILOVER
 	else

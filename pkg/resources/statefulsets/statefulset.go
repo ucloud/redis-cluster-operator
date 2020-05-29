@@ -260,7 +260,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Lifecycle: &corev1.Lifecycle{
 			PostStart: &corev1.Handler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/sh", "-c", "echo ${REDIS_PASSWORD} > /etc/redis_password"},
+					Command: []string{"/bin/sh", "-c", "echo ${REDIS_PASSWORD} > /data/redis_password"},
 				},
 			},
 			PreStop: &corev1.Handler{

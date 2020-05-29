@@ -352,9 +352,9 @@ func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext
 		}
 		defer admin.Close()
 
-		// Update the password recorded in the file /etc/redis_password, redis pod preStop hook
-		// need /etc/redis_password do CLUSTER FAILOVER
-		cmd := fmt.Sprintf("echo %s > /etc/redis_password", newPassword)
+		// Update the password recorded in the file /data/redis_password, redis pod preStop hook
+		// need /data/redis_password do CLUSTER FAILOVER
+		cmd := fmt.Sprintf("echo %s > /data/redis_password", newPassword)
 		if err := r.execer.ExecCommandInPodSet(podSet, "/bin/sh", "-c", cmd); err != nil {
 			return err
 		}
