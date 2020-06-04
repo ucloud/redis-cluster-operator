@@ -119,7 +119,25 @@ func shouldUpdateRedis(cluster *redisv1alpha1.DistributedRedisCluster, sts *apps
 	if result := expectResource.Limits.Cpu().Cmp(*currentResource.Limits.Cpu()); result != 0 {
 		return true
 	}
-	return false
+	return monitorChanged(cluster, sts)
+}
+
+func monitorChanged(cluster *redisv1alpha1.DistributedRedisCluster, sts *appsv1.StatefulSet) bool {
+	if cluster.Spec.Monitor != nil {
+		for _, container := range sts.Spec.Template.Spec.Containers {
+			if container.Name == statefulsets.ExporterContainerName {
+				return false
+			}
+		}
+		return true
+	} else {
+		for _, container := range sts.Spec.Template.Spec.Containers {
+			if container.Name == statefulsets.ExporterContainerName {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 func (r *realEnsureResource) ensureRedisPDB(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) error {

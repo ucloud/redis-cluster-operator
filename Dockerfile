@@ -13,7 +13,7 @@ ARG GIT_SHA=0000000
 
 WORKDIR /src
 
-COPY go.mod ./ go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY pkg ./ cmd ./ version ./

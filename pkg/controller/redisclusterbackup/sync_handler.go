@@ -267,15 +267,14 @@ func (r *ReconcileRedisClusterBackup) getBackupJob(reqLogger logr.Logger, backup
 		},
 	}
 	if backup.Spec.PodSpec != nil {
-		podSpec := job.Spec.Template.Spec
-		podSpec.NodeSelector = backup.Spec.PodSpec.NodeSelector
-		podSpec.Affinity = backup.Spec.PodSpec.Affinity
-		podSpec.SchedulerName = backup.Spec.PodSpec.SchedulerName
-		podSpec.Tolerations = backup.Spec.PodSpec.Tolerations
-		podSpec.PriorityClassName = backup.Spec.PodSpec.PriorityClassName
-		podSpec.Priority = backup.Spec.PodSpec.Priority
-		podSpec.SecurityContext = backup.Spec.PodSpec.SecurityContext
-		podSpec.ImagePullSecrets = backup.Spec.PodSpec.ImagePullSecrets
+		job.Spec.Template.Spec.NodeSelector = backup.Spec.PodSpec.NodeSelector
+		job.Spec.Template.Spec.Affinity = backup.Spec.PodSpec.Affinity
+		job.Spec.Template.Spec.SchedulerName = backup.Spec.PodSpec.SchedulerName
+		job.Spec.Template.Spec.Tolerations = backup.Spec.PodSpec.Tolerations
+		job.Spec.Template.Spec.PriorityClassName = backup.Spec.PodSpec.PriorityClassName
+		job.Spec.Template.Spec.Priority = backup.Spec.PodSpec.Priority
+		job.Spec.Template.Spec.SecurityContext = backup.Spec.PodSpec.SecurityContext
+		job.Spec.Template.Spec.ImagePullSecrets = backup.Spec.PodSpec.ImagePullSecrets
 	}
 	if backup.Spec.Backend.Local != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
