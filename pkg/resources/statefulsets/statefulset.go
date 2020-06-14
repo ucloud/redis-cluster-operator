@@ -226,7 +226,7 @@ func mergeRenameCmds(userCmds []string, systemRenameCmdMap map[string]string) []
 	return cmds
 }
 
-func _createContainerPort(name string, port int32, hostNetwork bool) corev1.ContainerPort {
+func createContainerPort(name string, port int32, hostNetwork bool) corev1.ContainerPort {
 	var containerPort = corev1.ContainerPort{
 		Name:          name,
 		ContainerPort: port,
@@ -248,8 +248,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Image:           cluster.Spec.Image,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
-			_createContainerPort("client", 6379, hostNetwork),
-			_createContainerPort("gossip", 16379, hostNetwork),
+			createContainerPort("client", 6379, hostNetwork),
+			createContainerPort("gossip", 16379, hostNetwork),
 		},
 		VolumeMounts: volumeMounts(),
 		Command:      getRedisCommand(cluster, password),
