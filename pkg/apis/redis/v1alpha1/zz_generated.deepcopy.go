@@ -213,9 +213,7 @@ func (in *DistributedRedisClusterSpec) DeepCopyInto(out *DistributedRedisCluster
 		*out = new(InitSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.hostNetwork != nil {
-		out.hostNetwork = in.hostNetwork
-	}
+	out.HostNetwork = in.HostNetwork
 	return
 }
 
