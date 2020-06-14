@@ -36,6 +36,7 @@ type DistributedRedisClusterSpec struct {
 	PasswordSecret       *corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
 	Monitor              *AgentSpec                   `json:"monitor,omitempty"`
 	Init                 *InitSpec                    `json:"init,omitempty"`
+	hostNetwork          bool                         `json:"hostNetwork,omitempty"`
 }
 
 type AgentSpec struct {

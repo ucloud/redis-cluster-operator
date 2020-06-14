@@ -67,9 +67,10 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 					SecurityContext:  spec.SecurityContext,
 					NodeSelector:     cluster.Spec.NodeSelector,
 					Containers: []corev1.Container{
-						redisServerContainer(cluster, password),
+						redisServerContainer(cluster, password, spec.hostNetwork),
 					},
 					Volumes: volumes,
+					HostNetwork:       spec.hostNetwork,
 				},
 			},
 		},
@@ -225,7 +226,21 @@ func mergeRenameCmds(userCmds []string, systemRenameCmdMap map[string]string) []
 	return cmds
 }
 
-func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
+func _createContainerPort(name string, port int32, hostNetwork bool) corev1.ContainerPort {
+	var containerPort = corev1.ContainerPort{
+		Name:          name,
+		ContainerPort: port,
+		Protocol:      corev1.ProtocolTCP,
+	}
+
+	if hostNetwork {
+		containerPort.HostPort = port
+	}
+
+	return containerPort
+}
+
+func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar, hostNetwork bool) corev1.Container {
 	probeArg := "redis-cli -h $(hostname) ping"
 
 	container := corev1.Container{
@@ -233,16 +248,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Image:           cluster.Spec.Image,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
-			{
-				Name:          "client",
-				ContainerPort: 6379,
-				Protocol:      corev1.ProtocolTCP,
-			},
-			{
-				Name:          "gossip",
-				ContainerPort: 16379,
-				Protocol:      corev1.ProtocolTCP,
-			},
+			_createContainerPort("client", 6379, hostNetwork),
+			_createContainerPort("gossip", 16379, hostNetwork),
 		},
 		VolumeMounts: volumeMounts(),
 		Command:      getRedisCommand(cluster, password),
