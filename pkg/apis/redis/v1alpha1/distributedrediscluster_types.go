@@ -37,6 +37,8 @@ type DistributedRedisClusterSpec struct {
 	Monitor              *AgentSpec                   `json:"monitor,omitempty"`
 	Init                 *InitSpec                    `json:"init,omitempty"`
 	HostNetwork          bool                         `json:"hostNetwork,omitempty"`
+	ClientPort           int                        `json:"clientPort,omitempty"`
+	GossipPort           int                        `json:"gossipPort,omitempty"`
 }
 
 type AgentSpec struct {

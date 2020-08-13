@@ -17,7 +17,7 @@ func (c *CheckAndHeal) FixFailedNodes(cluster *redisv1alpha1.DistributedRedisClu
 		c.Logger.Info("[FixFailedNodes] Forgetting failed node, this command might fail, this is not an error", "node", id)
 		if !c.DryRun {
 			c.Logger.Info("[FixFailedNodes] try to forget node", "nodeId", id)
-			if err := admin.ForgetNode(id); err != nil {
+			if err := admin.ForgetNode(id, cluster.Spec.ClientPort); err != nil {
 				errs = append(errs, err)
 			}
 		}
