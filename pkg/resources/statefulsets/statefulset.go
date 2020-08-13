@@ -3,6 +3,7 @@ package statefulsets
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -180,6 +181,7 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		"/conf/fix-ip.sh",
 		"redis-server",
 		"/conf/redis.conf",
+		"--port " + strconv.Itoa(cluster.Spec.ClientPort),
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
