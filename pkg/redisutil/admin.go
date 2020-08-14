@@ -484,8 +484,6 @@ func (a *Admin) migrateCmdArgs(dest *Node, timeoutStr string, replace bool, keys
 
 // ForgetNode used to force other redis cluster node to forget a specific node
 func (a *Admin) ForgetNode(id string,port int) error {
-	//TODO we have no cluster info, search upper
-
 	infos, _ := a.GetClusterInfos(port)
 	for nodeAddr, nodeinfos := range infos.Infos {
 		if nodeinfos.Node.ID == id {
