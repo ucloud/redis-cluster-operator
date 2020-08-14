@@ -20,6 +20,8 @@ const (
 	RedisConfigFileDefault = "/redis-conf/redis.conf"
 	// RedisServerBinDefault default binary name
 	RedisServerBinDefault = "redis-server"
+	// RedisServerPortDefault default redis port
+	RedisServerPortDefault = "6379"
 	// RedisMaxMemoryDefault default redis max memory
 	RedisMaxMemoryDefault = 0
 	// RedisMaxMemoryPolicyDefault default redis max memory evition policy
@@ -51,6 +53,7 @@ type Redis struct {
 	RenameCommandsFile string
 	HTTPServerAddr     string
 	ServerBin          string
+	ServerPort         string
 	ServerIP           string
 	MaxMemory          uint32
 	MaxMemoryPolicy    string
@@ -67,6 +70,7 @@ func (r *Redis) AddFlags(fs *pflag.FlagSet) {
 	fs.Uint32Var(&r.MaxMemory, "max-memory", RedisMaxMemoryDefault, "redis max memory")
 	fs.StringVar(&r.MaxMemoryPolicy, "max-memory-policy", RedisMaxMemoryPolicyDefault, "redis max memory evition policy")
 	fs.StringVar(&r.ServerBin, "bin", RedisServerBinDefault, "redis server binary file name")
+	fs.StringVar(&r.ServerPort, "port", RedisServerPortDefault, "redis server listen port")
 	fs.StringVar(&r.ServerIP, "ip", "", "redis server listen ip")
 	fs.StringArrayVar(&r.ConfigFiles, "config-file", []string{}, "Location of redis configuration file that will be include in the ")
 }

@@ -9,8 +9,8 @@ import (
 
 // NewHeadLessSvcForCR creates a new headless service for the given Cluster.
 func NewHeadLessSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) *corev1.Service {
-	clientPort := corev1.ServicePort{Name: "client", Port: cluster.Spec.ClientPort}
-	gossipPort := corev1.ServicePort{Name: "gossip", Port: cluster.Spec.GossipPort}
+	clientPort := corev1.ServicePort{Name: "client", Port: int32(cluster.Spec.ClientPort)}
+	gossipPort := corev1.ServicePort{Name: "gossip", Port: int32(cluster.Spec.GossipPort)}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:          labels,
@@ -29,8 +29,8 @@ func NewHeadLessSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name st
 }
 
 func NewSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) *corev1.Service {
-	clientPort := corev1.ServicePort{Name: "client", Port: cluster.Spec.ClientPort}
-	gossipPort := corev1.ServicePort{Name: "gossip", Port: cluster.Spec.GossipPort}
+	clientPort := corev1.ServicePort{Name: "client", Port: int32(cluster.Spec.ClientPort)}
+	gossipPort := corev1.ServicePort{Name: "gossip", Port: int32(cluster.Spec.GossipPort)}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:          labels,

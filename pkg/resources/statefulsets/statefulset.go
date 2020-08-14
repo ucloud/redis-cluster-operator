@@ -250,8 +250,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Image:           cluster.Spec.Image,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
-			createContainerPort("client", cluster.Spec.ClientPort, hostNetwork),
-			createContainerPort("gossip", cluster.Spec.GossipPort, hostNetwork),
+			createContainerPort("client", int32(cluster.Spec.ClientPort), hostNetwork),
+			createContainerPort("gossip", int32(cluster.Spec.GossipPort), hostNetwork),
 		},
 		VolumeMounts: volumeMounts(),
 		Command:      getRedisCommand(cluster, password),
