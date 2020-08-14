@@ -232,13 +232,13 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 		return reconcile.Result{}, Kubernetes.Wrap(err, "getClusterPassword")
 	}
 
-	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf(), reqLogger)
+	admin, err := newRedisAdmin(ctx.pods, password, config.RedisConf(), reqLogger, instance.Spec.ClientPort)
 	if err != nil {
 		return reconcile.Result{}, Redis.Wrap(err, "newRedisAdmin")
 	}
 	defer admin.Close()
 
-	clusterInfos, err := admin.GetClusterInfos()
+	clusterInfos, err := admin.GetClusterInfos(ctx.cluster.Spec.ClientPort)
 	if err != nil {
 		if clusterInfos.Status == redisutil.ClusterInfosPartial {
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")
@@ -331,8 +331,7 @@ func (r *ReconcileDistributedRedisCluster) Reconcile(request reconcile.Request) 
 			return reconcile.Result{}, err
 		}
 	}
-
-	newClusterInfos, err := admin.GetClusterInfos()
+	newClusterInfos, err := admin.GetClusterInfos(ctx.cluster.Spec.ClientPort)
 	if err != nil {
 		if clusterInfos.Status == redisutil.ClusterInfosPartial {
 			return reconcile.Result{}, Redis.Wrap(err, "GetClusterInfos")

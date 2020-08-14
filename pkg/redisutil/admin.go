@@ -38,7 +38,7 @@ type IAdmin interface {
 	// Close the admin connections
 	Close()
 	// GetClusterInfos get node infos for all nodes
-	GetClusterInfos() (*ClusterInfos, error)
+	GetClusterInfos(port int) (*ClusterInfos, error)
 	// ClusterManagerNodeIsEmpty Checks whether the node is empty. Node is considered not-empty if it has
 	// some key or if it already knows other nodes
 	ClusterManagerNodeIsEmpty() (bool, error)
@@ -56,7 +56,7 @@ type IAdmin interface {
 	// DetachSlave dettach a slave to its master
 	DetachSlave(slave *Node) error
 	// ForgetNode execute the Redis command to force the cluster to forgot the the Node
-	ForgetNode(id string) error
+	ForgetNode(id string, port int) error
 	// SetSlots exec the redis command to set slots in a pipeline, provide
 	// and empty nodeID if the set slots commands doesn't take a nodeID in parameter
 	SetSlots(addr string, action string, slots []Slot, nodeID string) error
@@ -117,12 +117,12 @@ func (a *Admin) Close() {
 }
 
 // GetClusterInfos return the Nodes infos for all nodes
-func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
+func (a *Admin) GetClusterInfos(port int) (*ClusterInfos, error) {
 	infos := NewClusterInfos()
 	clusterErr := NewClusterInfosError()
 
 	for addr, c := range a.Connections().GetAll() {
-		nodeinfos, err := a.getInfos(c, addr)
+		nodeinfos, err := a.getInfos(c, addr, port)
 		if err != nil {
 			a.log.WithValues("err", err).Info("get redis info failed")
 			infos.Status = ClusterInfosPartial
@@ -146,7 +146,7 @@ func (a *Admin) GetClusterInfos() (*ClusterInfos, error) {
 	return infos, clusterErr
 }
 
-func (a *Admin) getInfos(c IClient, addr string) (*NodeInfos, error) {
+func (a *Admin) getInfos(c IClient, addr string, port int) (*NodeInfos, error) {
 	resp := c.Cmd("CLUSTER", "NODES")
 	if err := a.Connections().ValidateResp(resp, addr, "unable to retrieve node info"); err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func (a *Admin) getInfos(c IClient, addr string) (*NodeInfos, error) {
 		return nil, fmt.Errorf("wrong format from CLUSTER NODES: %v", err)
 	}
 
-	nodeInfos := DecodeNodeInfos(&raw, addr, a.log)
+	nodeInfos := DecodeNodeInfos(&raw, addr, a.log, port)
 
 	return nodeInfos, nil
 }
@@ -483,8 +483,8 @@ func (a *Admin) migrateCmdArgs(dest *Node, timeoutStr string, replace bool, keys
 }
 
 // ForgetNode used to force other redis cluster node to forget a specific node
-func (a *Admin) ForgetNode(id string) error {
-	infos, _ := a.GetClusterInfos()
+func (a *Admin) ForgetNode(id string,port int) error {
+	infos, _ := a.GetClusterInfos(port)
 	for nodeAddr, nodeinfos := range infos.Infos {
 		if nodeinfos.Node.ID == id {
 			continue

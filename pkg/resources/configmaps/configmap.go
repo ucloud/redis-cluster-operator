@@ -27,7 +27,7 @@ failover() {
 	echo "Do CLUSTER FAILOVER"
 	masterID=$(cat ${CLUSTER_CONFIG} | grep "myself" | awk '{print $1}')
 	echo "Master: ${masterID}"
-	slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk 'NR==1{print $2}' | sed 's/:6379@16379//')
+	slave=$(cat ${CLUSTER_CONFIG} | grep ${masterID} | grep "slave" | awk 'NR==1{print $2}' | sed 's/:`+strconv.Itoa(cluster.Spec.ClientPort)+`@`+strconv.Itoa(cluster.Spec.GossipPort)+`//')
 	echo "Slave: ${slave}"
 	password=$(cat /data/redis_password)
 	if [[ -z "${password}" ]]; then
@@ -53,7 +53,7 @@ if [ -f ${CLUSTER_CONFIG} ]; then
     exit 1
     fi
     echo "Updating my IP to ${POD_IP} in ${CLUSTER_CONFIG}"
-    sed -i.bak -e "/myself/ s/ .*:6379@16379/ ${POD_IP}:6379@16379/" ${CLUSTER_CONFIG}
+    sed -i.bak -e "/myself/ s/ .*:`+strconv.Itoa(cluster.Spec.ClientPort)+`@`+strconv.Itoa(cluster.Spec.GossipPort)+`/ ${POD_IP}:`+strconv.Itoa(cluster.Spec.ClientPort)+`@`+strconv.Itoa(cluster.Spec.GossipPort)+`/" ${CLUSTER_CONFIG}
 fi
 exec "$@"`
 

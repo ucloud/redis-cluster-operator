@@ -3,6 +3,7 @@ package statefulsets
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -180,6 +181,7 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		"/conf/fix-ip.sh",
 		"redis-server",
 		"/conf/redis.conf",
+		"--port " + strconv.Itoa(cluster.Spec.ClientPort),
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
@@ -248,8 +250,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Image:           cluster.Spec.Image,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
-			createContainerPort("client", 6379, hostNetwork),
-			createContainerPort("gossip", 16379, hostNetwork),
+			createContainerPort("client", int32(cluster.Spec.ClientPort), hostNetwork),
+			createContainerPort("gossip", int32(cluster.Spec.GossipPort), hostNetwork),
 		},
 		VolumeMounts: volumeMounts(),
 		Command:      getRedisCommand(cluster, password),
