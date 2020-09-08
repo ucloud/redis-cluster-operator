@@ -1,0 +1,105 @@
+apiVersion: rbac.authorization.k8s.io/v1
+{{- if eq (len .Values.operator.namespace) 0 }}
+kind: ClusterRole
+{{- else }}
+kind: Role
+{{- end }}
+metadata:
+  name: redis-cluster-operator
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - secrets
+      - endpoints
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - list
+      - watch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods/exec
+      - secrets
+      - services
+      - events
+      - persistentvolumeclaims
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+    - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+      - delete
+  - apiGroups:
+      - apps
+    resourceNames:
+      - redis-operator
+    resources:
+      - deployments/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - redis.kun
+    resources:
+      - '*'
+      - redisclusterbackups
+    verbs:
+      - delete
+      - deletecollection
+      - get
+      - list
+      - patch
+      - update
+      - watch
