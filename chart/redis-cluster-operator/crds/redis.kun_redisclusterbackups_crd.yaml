@@ -1,4 +1,3 @@
-{{- if .Values.operator.backup_enabled }}
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
@@ -53,4 +52,3 @@ spec:
           description: RedisClusterBackupStatus defines the observed state of RedisClusterBackup
           type: object
       type: object
-{{- end }}
