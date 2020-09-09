@@ -20,7 +20,7 @@ spec:
           # Replace this with the built image name
           image: {{ .Values.operator.image_source }}:{{ .Values.operator.image_tag }}
           securityContext:
-            {{- .Values.operator.containersecurityContext | toYaml | nindent 14 }}
+            {{- .Values.operator.containersecurityContext | toYaml | nindent 12 }}
           command:
           - redis-cluster-operator
           args:
