@@ -14,11 +14,13 @@ spec:
     spec:
       serviceAccountName: {{ .Values.operator.service_account_name }}
       securityContext:
-        {{- .Values.operator.securityContext | toYaml | nindent  }}
+        {{- .Values.operator.podsecurityContext | toYaml | nindent 8 }}
       containers:
         - name: {{ .Values.operator.name }}
           # Replace this with the built image name
           image: {{ .Values.operator.image_source }}:{{ .Values.operator.image_tag }}
+          securityContext:
+            {{- .Values.operator.containersecurityContext | toYaml | nindent 14 }}
           command:
           - redis-cluster-operator
           args:

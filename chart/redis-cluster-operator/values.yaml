@@ -14,11 +14,16 @@ operator:
     requests:
       cpu: 100m
       memory: 100Mi
-  securityContext:
+  podsecurityContext:
     runAsUser: 1100
     runAsGroup: 1100
     fsGroup: 1100
     supplementalGroups: [1100]
+  containersecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 data:
   redis_conf: |-
