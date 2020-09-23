@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.operator.name }}
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      name: {{ .Values.operator.name }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.operator.name }}
+    spec:
+      serviceAccountName: {{ .Values.operator.service_account_name }}
+      securityContext:
+        {{- .Values.operator.podsecurityContext | toYaml | nindent 8 }}
+      containers:
+        - name: {{ .Values.operator.name }}
+          # Replace this with the built image name
+          image: {{ .Values.operator.image_source }}:{{ .Values.operator.image_tag }}
+          securityContext:
+            {{- .Values.operator.containersecurityContext | toYaml | nindent 12 }}
+          command:
+          - redis-cluster-operator
+          args:
+          - --rename-command-path=/etc/redisconf
+          - --rename-command-file=redis.conf
+          imagePullPolicy: {{ .Values.operator.imagePullPolicy }}
+          resources:
+            {{- .Values.operator.resources | toYaml | nindent 12 }}
+          env:
+            - name: WATCH_NAMESPACE
+              value: {{ .Values.operator.namespace | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: {{ .Values.operator.name | quote }}
+          volumeMounts:
+            - name: redisconf
+              mountPath: /etc/redisconf
+      volumes:
+        - name: redisconf
+          configMap:
+            name: redis-admin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-admin
+data:
+  redis.conf: |- 
+    {{- .Values.data.redis_conf | nindent 4 }}
