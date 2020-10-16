@@ -232,6 +232,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Name:            redisServerName,
 		Image:           cluster.Spec.Image,
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
+		SecurityContext: cluster.Spec.ContainerSecurityContext,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "client",
