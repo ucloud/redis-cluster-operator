@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-backup
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: {storageClassName}
+  volumeMode: Filesystem
+---
+
+apiVersion: redis.kun/v1alpha1
+kind: RedisClusterBackup
+metadata:
+  name: example-redisclusterbackup
+  annotations:
+    redis.kun/scope: cluster-scoped
+spec:
+  image: hub.ucloudadmin.com/uaek/redis-tools:5.0.4
+  # on same namespace
+  redisClusterName: test
+  local:
+    mountPath: /back
+    persistentVolumeClaim:
+      claimName: test-backup
