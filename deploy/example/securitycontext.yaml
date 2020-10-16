@@ -1,0 +1,21 @@
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  annotations:
+    # if your operator run as cluster-scoped, add this annotations
+    redis.kun/scope: cluster-scoped
+  name: example-distributedrediscluster
+spec:
+  image: redis:5.0.4-alpine
+  masterSize: 3
+  clusterReplicas: 1
+  securityContext:
+    runAsUser: 1101
+    runAsGroup: 1101
+    fsGroup: 1101
+    supplementalGroups: [1101]
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
