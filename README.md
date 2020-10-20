@@ -170,7 +170,7 @@ spec:
 
 #### Backup and Restore
 
-NOTE: **Only Ceph object storage and PVC is supported now**
+NOTE: **Only Ceph S3 object storage and PVC is supported now**
 
 Backup
 ```

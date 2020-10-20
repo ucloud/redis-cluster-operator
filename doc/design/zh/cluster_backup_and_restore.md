@@ -1,6 +1,6 @@
 # 备份和恢复
 
-目前只支持备份到 ceph 对象存储及本地 pvc 中。
+目前只支持备份到 ceph S3对象存储及本地 pvc 中。
 
 备份开始时使用 redis-cli 同步 Master 的 RDB到本地后再使用 [Rclone](https://rclone.org/) 将
 RDB 文件传输到对象存储或者 pvc 中，恢复时先使用 Rclone 从之前备份的位置同步备份到本地后，再启动 Redis

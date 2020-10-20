@@ -35,4 +35,4 @@ spec:
   init:
     backupSource:
       name: example-redisclusterbackup
-      namespace: prj-shutest
+      namespace: default
