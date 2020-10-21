@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  redis-cluster-operator:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2020-10-21T07:52:44.802097253Z"
+    description: A Helm chart for Redis cluster operator deployment
+    digest: ae534b4dd1ef01bf01baace1c3b4034e2472a434f5eafd826d789a44fcb18dc2
+    name: redis-cluster-operator
+    type: application
+    urls:
+    - https://github.com/ucloud/redis-cluster-operator/releases/download/redis-cluster-operator-0.1.0/redis-cluster-operator-0.1.0.tgz
+    version: 0.1.0
+generated: "2020-10-21T07:52:44.619114631Z"
