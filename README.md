@@ -93,6 +93,8 @@ redis-cluster-operator   1/1     1            1           1d
 
 #### Deploy a sample Redis Cluster
 
+NOTE: **Only the redis cluster that use persistent storage(pvc) can recover after accidental deletion or rolling update.Even if you do not use persistence(like rdb or aof), you need to set pvc for redis.**
+
 ```
 $ kubectl apply -f deploy/example/redis.kun_v1alpha1_distributedrediscluster_cr.yaml
 ```
@@ -168,7 +170,7 @@ spec:
 
 #### Backup and Restore
 
-**Only Ceph object storage is supported now**
+NOTE: **Only Ceph S3 object storage and PVC is supported now**
 
 Backup
 ```
