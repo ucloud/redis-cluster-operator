@@ -47,7 +47,7 @@ func NewSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, la
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Spec: corev1.ServiceSpec{
-			Ports:    []corev1.ServicePort{clientPort, gossipPort},
+			Ports:    ports,
 			Selector: labels,
 		},
 	}
