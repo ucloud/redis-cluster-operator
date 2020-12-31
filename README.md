@@ -70,24 +70,24 @@ Table of Contents
 
 Register the DistributedRedisCluster and RedisClusterBackup custom resource definition (CRD).
 ```
-$ kubectl create -f deploy/crds/redis.kun_distributedredisclusters_crd.yaml
-$ kubectl create -f deploy/crds/redis.kun_redisclusterbackups_crd.yaml
+kubectl create -f deploy/crds/redis.kun_distributedredisclusters_crd.yaml
+kubectl create -f deploy/crds/redis.kun_redisclusterbackups_crd.yaml
 ```
 
 A namespace-scoped operator watches and manages resources in a single namespace, whereas a cluster-scoped operator watches and manages resources cluster-wide.
 You can chose run your operator as namespace-scoped or cluster-scoped.
 ```
 // cluster-scoped
-$ kubectl create -f deploy/service_account.yaml
-$ kubectl create -f deploy/cluster/cluster_role.yaml
-$ kubectl create -f deploy/cluster/cluster_role_binding.yaml
-$ kubectl create -f deploy/cluster/operator.yaml
+kubectl create -f deploy/service_account.yaml
+kubectl create -f deploy/cluster/cluster_role.yaml
+kubectl create -f deploy/cluster/cluster_role_binding.yaml
+kubectl create -f deploy/cluster/operator.yaml
 
 // namespace-scoped
-$ kubectl create -f deploy/service_account.yaml
-$ kubectl create -f deploy/namespace/role.yaml
-$ kubectl create -f deploy/namespace/role_binding.yaml
-$ kubectl create -f deploy/namespace/operator.yaml
+kubectl create -f deploy/service_account.yaml
+kubectl create -f deploy/namespace/role.yaml
+kubectl create -f deploy/namespace/role_binding.yaml
+kubectl create -f deploy/namespace/operator.yaml
 ```
 
 #### Install using helm chart
@@ -105,7 +105,7 @@ helm install --generate-name ucloud-operator/redis-cluster-operator
 
 Verify that the redis-cluster-operator is up and running:
 ```
-$ kubectl get deployment
+kubectl get deployment
 NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
 redis-cluster-operator   1/1     1            1           1d
 ```
@@ -116,16 +116,16 @@ redis-cluster-operator   1/1     1            1           1d
 NOTE: **Only the redis cluster that use persistent storage(pvc) can recover after accidental deletion or rolling update.Even if you do not use persistence(like rdb or aof), you need to set pvc for redis.**
 
 ```
-$ kubectl apply -f deploy/example/redis.kun_v1alpha1_distributedrediscluster_cr.yaml
+kubectl apply -f deploy/example/redis.kun_v1alpha1_distributedrediscluster_cr.yaml
 ```
 
 Verify that the cluster instances and its components are running.
 ```
-$ kubectl get distributedrediscluster
+kubectl get distributedrediscluster
 NAME                              MASTERSIZE   STATUS    AGE
 example-distributedrediscluster   3            Scaling   11s
 
-$ kubectl get all -l redis.kun/name=example-distributedrediscluster
+kubectl get all -l redis.kun/name=example-distributedrediscluster
 NAME                                          READY   STATUS    RESTARTS   AGE
 pod/drc-example-distributedrediscluster-0-0   1/1     Running   0          2m48s
 pod/drc-example-distributedrediscluster-0-1   1/1     Running   0          2m8s
@@ -145,7 +145,7 @@ statefulset.apps/drc-example-distributedrediscluster-0   2/2     2m48s
 statefulset.apps/drc-example-distributedrediscluster-1   2/2     2m48s
 statefulset.apps/drc-example-distributedrediscluster-2   2/2     2m48s
 
-$ kubectl get distributedrediscluster
+kubectl get distributedrediscluster
 NAME                              MASTERSIZE   STATUS    AGE
 example-distributedrediscluster   3            Healthy   4m
 ```
@@ -194,48 +194,48 @@ NOTE: **Only Ceph S3 object storage and PVC is supported now**
 
 Backup
 ```
-$ kubectl create -f deploy/example/backup-restore/redisclusterbackup_cr.yaml
+kubectl create -f deploy/example/backup-restore/redisclusterbackup_cr.yaml
 ```
 
 Restore from backup
 ```
-$ kubectl create -f deploy/example/backup-restore/restore.yaml
+kubectl create -f deploy/example/backup-restore/restore.yaml
 ```
 
 #### Prometheus Discovery
 
 ```
-$ kubectl create -f deploy/example/prometheus-exporter.yaml
+kubectl create -f deploy/example/prometheus-exporter.yaml
 ```
 
 #### Create Redis Cluster with password
 
 ```
-$ kubectl create -f deploy/example/custom-password.yaml
+kubectl create -f deploy/example/custom-password.yaml
 ```
 
 #### Persistent Volume
 
 ```
-$ kubectl create -f deploy/example/persistent.yaml
+kubectl create -f deploy/example/persistent.yaml
 ```
 
 #### Custom Configuration
 
 ```
-$ kubectl create -f deploy/example/custom-config.yaml
+kubectl create -f deploy/example/custom-config.yaml
 ```
 
 #### Custom Service
 
 ```
-$ kubectl create -f deploy/example/custom-service.yaml
+kubectl create -f deploy/example/custom-service.yaml
 ```
 
 #### Custom Resource
 
 ```
-$ kubectl create -f deploy/example/custom-resources.yaml
+kubectl create -f deploy/example/custom-resources.yaml
 ```
 
 ## ValidatingWebhook
