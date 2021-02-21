@@ -31,9 +31,9 @@ failover() {
 	echo "Slave: ${slave}"
 	password=$(cat /data/redis_password)
 	if [[ -z "${password}" ]]; then
-		redis-cli -h ${slave} CLUSTER FAILOVER
+		redis-cli -h ${slave} -p `+strconv.Itoa(cluster.Spec.ClientPort)+` CLUSTER FAILOVER
 	else
-		redis-cli -h ${slave} -a "${password}" CLUSTER FAILOVER
+		redis-cli -h ${slave} -p `+strconv.Itoa(cluster.Spec.ClientPort)+` -a "${password}" CLUSTER FAILOVER
 	fi
 	echo "Wait for MASTER <-> SLAVE syncFinished"
 	sleep 20

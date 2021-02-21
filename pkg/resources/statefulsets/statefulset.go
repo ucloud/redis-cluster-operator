@@ -243,7 +243,7 @@ func createContainerPort(name string, port int32, hostNetwork bool) corev1.Conta
 }
 
 func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar, hostNetwork bool) corev1.Container {
-	probeArg := "redis-cli -h $(hostname) ping"
+	probeArg := "redis-cli -h $(hostname) -p " + strconv.Itoa(cluster.Spec.ClientPort) + " ping"
 
 	container := corev1.Container{
 		Name:            redisServerName,
@@ -296,7 +296,7 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		Lifecycle: &corev1.Lifecycle{
 			PostStart: &corev1.Handler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/sh", "-c", "echo ${REDIS_PASSWORD} > /data/redis_password"},
+					Command: []string{"/bin/sh", "-p", strconv.Itoa(cluster.Spec.ClientPort), "-c", "echo ${REDIS_PASSWORD} > /data/redis_password"},
 				},
 			},
 			PreStop: &corev1.Handler{
