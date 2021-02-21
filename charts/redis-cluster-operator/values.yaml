@@ -1,0 +1,36 @@
+operator:
+  backup_enabled: "false"
+  name: "redis-cluster-operator"
+  replicas: 1
+  service_account_name: "redis-cluster-operator"
+  namespace: ""  # keep this value "" if you want to deploy cluster-wide operator
+  image_source: "fishu/redis-cluster-operator"
+  image_tag: "latest"
+  imagePullPolicy: "Always"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  podsecurityContext:
+    runAsUser: 1100
+    runAsGroup: 1100
+    fsGroup: 1100
+    supplementalGroups: [1100]
+  containersecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+data:
+  redis_conf: |-
+    rename-command CONFIG lni07z1p
+    rename-command BGSAVE pp14qluk
+    rename-command DEBUG 8a4insyv
+    rename-command SAVE 6on30p6z
+    rename-command SHUTDOWN dvui0opr
+    rename-command SLAVEOF xwxvcw36
+    rename-command BGREWRITEAOF www07fko
