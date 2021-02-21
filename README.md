@@ -20,10 +20,14 @@ Table of Contents
 
    * [redis-cluster-operator](#redis-cluster-operator)
       * [Overview](#overview)
+   * [Table of Contents](#table-of-contents)
       * [Prerequisites](#prerequisites)
       * [Features](#features)
       * [Quick Start](#quick-start)
          * [Deploy redis cluster operator](#deploy-redis-cluster-operator)
+            * [Install Step by step](#install-step-by-step)
+            * [Install using helm chart](#install-using-helm-chart)
+         * [Usage](#usage)
             * [Deploy a sample Redis Cluster](#deploy-a-sample-redis-cluster)
             * [Scaling Up the Redis Cluster](#scaling-up-the-redis-cluster)
             * [Scaling Down the Redis Cluster](#scaling-down-the-redis-cluster)
@@ -62,6 +66,8 @@ Table of Contents
 
 ### Deploy redis cluster operator
 
+#### Install Step by step
+
 Register the DistributedRedisCluster and RedisClusterBackup custom resource definition (CRD).
 ```
 $ kubectl create -f deploy/crds/redis.kun_distributedredisclusters_crd.yaml
@@ -84,6 +90,19 @@ $ kubectl create -f deploy/namespace/role_binding.yaml
 $ kubectl create -f deploy/namespace/operator.yaml
 ```
 
+#### Install using helm chart
+
+Add Helm repository
+```
+helm repo add ucloud-operator https://ucloud.github.io/redis-cluster-operator/
+helm repo update
+```
+
+Install chart
+```
+helm install --generate-name ucloud-operator/redis-cluster-operator
+```
+
 Verify that the redis-cluster-operator is up and running:
 ```
 $ kubectl get deployment
@@ -91,7 +110,10 @@ NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
 redis-cluster-operator   1/1     1            1           1d
 ```
 
+### Usage
 #### Deploy a sample Redis Cluster
+
+NOTE: **Only the redis cluster that use persistent storage(pvc) can recover after accidental deletion or rolling update.Even if you do not use persistence(like rdb or aof), you need to set pvc for redis.**
 
 ```
 $ kubectl apply -f deploy/example/redis.kun_v1alpha1_distributedrediscluster_cr.yaml
@@ -168,7 +190,7 @@ spec:
 
 #### Backup and Restore
 
-**Only Ceph object storage is supported now**
+NOTE: **Only Ceph S3 object storage and PVC is supported now**
 
 Backup
 ```

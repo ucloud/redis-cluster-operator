@@ -1,0 +1,38 @@
+apiVersion: redis.kun/v1alpha1
+kind: DistributedRedisCluster
+metadata:
+  name: restore
+spec:
+  clusterReplicas: 1
+  config:
+    appendfsync: everysec
+    appendonly: "yes"
+    auto-aof-rewrite-min-size: 64mb
+    auto-aof-rewrite-percentage: "100"
+    cluster-node-timeout: "5000"
+    loglevel: verbose
+    maxclients: "1000"
+    maxmemory: "0"
+    notify-keyspace-events: ""
+    rdbcompression: "yes"
+    save: 900 1 300 10
+    stop-writes-on-bgsave-error: "yes"
+    tcp-keepalive: "0"
+    timeout: "0"
+  image: redis:5.0.4-alpine
+  masterSize: 3
+  resources:
+    limits:
+      cpu: 400m
+      memory: 300Mi
+    requests:
+      cpu: 400m
+      memory: 300Mi
+  storage:
+    class: {storageClassName}
+    size: 10Gi
+    type: persistent-claim
+  init:
+    backupSource:
+      name: example-redisclusterbackup
+      namespace: default

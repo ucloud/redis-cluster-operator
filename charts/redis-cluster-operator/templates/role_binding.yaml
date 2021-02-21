@@ -1,0 +1,16 @@
+{{- if eq (len .Values.operator.namespace) 0 }}
+kind: ClusterRoleBinding
+{{- else }}
+kind: RoleBinding
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: redis-cluster-operator
+subjects:
+- kind: ServiceAccount
+  name: redis-cluster-operator
+  namespace: {{.Release.Namespace}}
+roleRef:
+  kind: ClusterRole
+  name: redis-cluster-operator
+  apiGroup: rbac.authorization.k8s.io

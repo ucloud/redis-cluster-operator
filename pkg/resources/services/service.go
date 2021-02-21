@@ -29,8 +29,16 @@ func NewHeadLessSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name st
 }
 
 func NewSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, labels map[string]string) *corev1.Service {
+	var ports []corev1.ServicePort
 	clientPort := corev1.ServicePort{Name: "client", Port: int32(cluster.Spec.ClientPort)}
 	gossipPort := corev1.ServicePort{Name: "gossip", Port: int32(cluster.Spec.GossipPort)}
+	if cluster.Spec.Monitor == nil {
+		ports = append(ports, clientPort, gossipPort)
+	} else {
+		ports = append(ports, clientPort, gossipPort,
+			corev1.ServicePort{Name: "prom-http", Port: cluster.Spec.Monitor.Prometheus.Port})
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:          labels,
@@ -39,7 +47,7 @@ func NewSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, la
 			OwnerReferences: redisv1alpha1.DefaultOwnerReferences(cluster),
 		},
 		Spec: corev1.ServiceSpec{
-			Ports:    []corev1.ServicePort{clientPort, gossipPort},
+			Ports:    ports,
 			Selector: labels,
 		},
 	}
