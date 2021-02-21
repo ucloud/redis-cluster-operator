@@ -368,8 +368,8 @@ func IsRedisClusterBackupProperly(f *Framework, drcb *redisv1alpha1.RedisCluster
 	}
 }
 
-func NewGoRedisClient(svc, namespaces, password string) *GoRedis {
-	addr := fmt.Sprintf("%s.%s.svc.%s:6379", svc, namespaces, os.Getenv("CLUSTER_DOMAIN"))
+func NewGoRedisClient(svc, namespaces, password string, port int) *GoRedis {
+	addr := fmt.Sprintf("%s.%s.svc.%s:%d", svc, namespaces, os.Getenv("CLUSTER_DOMAIN"), port)
 	return NewGoRedis(addr, password)
 }
 
