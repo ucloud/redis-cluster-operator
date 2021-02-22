@@ -2,7 +2,6 @@ package distributedrediscluster
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -356,7 +355,7 @@ func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext
 		// Update the password recorded in the file /data/redis_password, redis pod preStop hook
 		// need /data/redis_password do CLUSTER FAILOVER
 		cmd := fmt.Sprintf("echo %s > /data/redis_password", newPassword)
-		if err := r.execer.ExecCommandInPodSet(podSet, "/bin/sh", "-c", "-p", strconv.Itoa(ctx.cluster.Spec.ClientPort), cmd); err != nil {
+		if err := r.execer.ExecCommandInPodSet(podSet, "/bin/sh", "-c", cmd); err != nil {
 			return err
 		}
 
