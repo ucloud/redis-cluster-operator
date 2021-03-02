@@ -11,6 +11,10 @@ subjects:
   name: redis-cluster-operator
   namespace: {{.Release.Namespace}}
 roleRef:
+{{- if eq (len .Values.operator.namespace) 0 }}
   kind: ClusterRole
+{{- else }}
+  kind: Role
+{{- end }}
   name: redis-cluster-operator
   apiGroup: rbac.authorization.k8s.io
