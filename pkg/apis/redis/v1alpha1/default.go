@@ -26,11 +26,6 @@ func (in *DistributedRedisCluster) DefaultSpec(log logr.Logger) bool {
 		update = true
 	}
 
-	if in.Spec.ClusterReplicas < minClusterReplicas {
-		in.Spec.ClusterReplicas = minClusterReplicas
-		update = true
-	}
-
 	if in.Spec.ClientPort == 0 {
 		in.Spec.ClientPort = defaultClientPort
 		update = true
