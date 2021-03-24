@@ -12,6 +12,7 @@ show_help() {
   echo "-h, --help                         show brief help"
   echo "    --data-dir=DIR                 path to directory holding db data (default: /var/data)"
   echo "    --host=HOST                    database host"
+  echo "    --port=PORT                    database port"
   echo "    --user=USERNAME                database username"
   echo "    --bucket=BUCKET                name of bucket"
   echo "    --location=LOCATION            location of backend (<provider>:<bucket name>)"
@@ -22,7 +23,7 @@ show_help() {
 RETVAL=0
 DEBUG=${DEBUG:-}
 REDIS_HOST=${REDIS_HOST:-}
-REDIS_PORT=${REDIS_PORT:-6379}
+REDIS_PORT=${REDIS_PORT:-}
 REDIS_USER=${REDIS_USER:-}
 REDIS_PASSWORD=${REDIS_PASSWORD:-}
 REDIS_BUCKET=${REDIS_BUCKET:-}
@@ -48,6 +49,10 @@ while test $# -gt 0; do
       ;;
     --host*)
       export REDIS_HOST=$(echo $1 | sed -e 's/^[^=]*=//g')
+      shift
+      ;;
+    --port*)
+      export REDIS_PORT=$(echo $1 | sed -e 's/^[^=]*=//g')
       shift
       ;;
     --user*)
@@ -108,8 +113,8 @@ case "$op" in
     # cleanup data dump dir
     rm -rf *
 
-    redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}"
-    redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
+    redis-cli --rdb dump.rdb -h "${REDIS_HOST}" -p "${REDIS_PORT}" -a "${REDIS_PASSWORD}"
+    redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" -a "${REDIS_PASSWORD}" CLUSTER NODES | grep myself > nodes.conf
     pwd
     ls -lh "$SOURCE_DIR"
     echo "Uploading dump file to the backend......."

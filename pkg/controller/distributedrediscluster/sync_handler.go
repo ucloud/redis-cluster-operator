@@ -161,7 +161,7 @@ func (r *ReconcileDistributedRedisCluster) initRestore(cluster *redisv1alpha1.Di
 }
 
 func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) error {
-	if infos, err := ctx.admin.GetClusterInfos(); err == nil {
+	if infos, err := ctx.admin.GetClusterInfos(ctx.cluster.Spec.ClientPort); err == nil {
 		ctx.reqLogger.V(6).Info("debug waitForClusterJoin", "cluster infos", infos)
 		return nil
 	}
@@ -180,7 +180,7 @@ func (r *ReconcileDistributedRedisCluster) waitForClusterJoin(ctx *syncContext) 
 	// the config as they are still empty with unassigned slots.
 	time.Sleep(1 * time.Second)
 
-	_, err = ctx.admin.GetClusterInfos()
+	_, err = ctx.admin.GetClusterInfos(ctx.cluster.Spec.ClientPort)
 	if err != nil {
 		return Requeue.Wrap(err, "wait for cluster join")
 	}
@@ -278,7 +278,7 @@ func (r *ReconcileDistributedRedisCluster) scalingDown(ctx *syncContext, current
 			if len(node.Slots) > 0 {
 				return Redis.New(fmt.Sprintf("node %s is not empty! Reshard data away and try again", node.String()))
 			}
-			if err := admin.ForgetNode(node.ID); err != nil {
+			if err := admin.ForgetNode(node.ID,ctx.cluster.Spec.ClientPort); err != nil {
 				return Redis.Wrap(err, "ForgetNode")
 			}
 		}
@@ -346,7 +346,7 @@ func (r *ReconcileDistributedRedisCluster) resetClusterPassword(ctx *syncContext
 		}
 
 		podSet := clusterPods(redisClusterPods.Items)
-		admin, err := newRedisAdmin(podSet, oldPassword, config.RedisConf(), ctx.reqLogger)
+		admin, err := newRedisAdmin(podSet, oldPassword, config.RedisConf(), ctx.reqLogger, ctx.cluster.Spec.ClientPort)
 		if err != nil {
 			return err
 		}

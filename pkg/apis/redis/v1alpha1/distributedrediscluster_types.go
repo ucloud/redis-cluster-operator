@@ -25,18 +25,21 @@ type DistributedRedisClusterSpec struct {
 	ServiceName      string                        `json:"serviceName,omitempty"`
 	Config           map[string]string             `json:"config,omitempty"`
 	// Set RequiredAntiAffinity to force the master-slave node anti-affinity.
-	RequiredAntiAffinity 		bool                         `json:"requiredAntiAffinity,omitempty"`
-	Affinity             		*corev1.Affinity             `json:"affinity,omitempty"`
-	NodeSelector         		map[string]string            `json:"nodeSelector,omitempty"`
-	ToleRations          		[]corev1.Toleration          `json:"toleRations,omitempty"`
-	SecurityContext      		*corev1.PodSecurityContext   `json:"securityContext,omitempty"`
-	ContainerSecurityContext	*corev1.SecurityContext		 `json:"containerSecurityContext,omitempty"`
-	Annotations          		map[string]string            `json:"annotations,omitempty"`
-	Storage              		*RedisStorage                `json:"storage,omitempty"`
-	Resources            		*corev1.ResourceRequirements `json:"resources,omitempty"`
-	PasswordSecret       		*corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
-	Monitor              		*AgentSpec                   `json:"monitor,omitempty"`
-	Init                 		*InitSpec                    `json:"init,omitempty"`
+	RequiredAntiAffinity     	bool                         `json:"requiredAntiAffinity,omitempty"`
+	Affinity                 	*corev1.Affinity             `json:"affinity,omitempty"`
+	NodeSelector             	map[string]string            `json:"nodeSelector,omitempty"`
+	ToleRations              	[]corev1.Toleration          `json:"toleRations,omitempty"`
+	SecurityContext          	*corev1.PodSecurityContext   `json:"securityContext,omitempty"`
+	ContainerSecurityContext 	*corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	Annotations              	map[string]string            `json:"annotations,omitempty"`
+	Storage                  	*RedisStorage                `json:"storage,omitempty"`
+	Resources                	*corev1.ResourceRequirements `json:"resources,omitempty"`
+	PasswordSecret           	*corev1.LocalObjectReference `json:"passwordSecret,omitempty"`
+	Monitor                  	*AgentSpec                   `json:"monitor,omitempty"`
+	Init                     	*InitSpec                    `json:"init,omitempty"`
+	HostNetwork              	bool                         `json:"hostNetwork,omitempty"`
+	ClientPort               	int                          `json:"clientPort,omitempty"`
+	GossipPort               	int                          `json:"gossipPort,omitempty"`
 }
 
 type AgentSpec struct {

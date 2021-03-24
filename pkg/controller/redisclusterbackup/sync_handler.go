@@ -326,6 +326,7 @@ func (r *ReconcileRedisClusterBackup) backupContainers(backup *redisv1alpha1.Red
 					fmt.Sprintf(`--data-dir=%s`, redisv1alpha1.BackupDumpDir),
 					fmt.Sprintf(`--location=%s`, location),
 					fmt.Sprintf(`--host=%s`, node.IP),
+					fmt.Sprintf(`--port=%s`, node.Port),
 					fmt.Sprintf(`--folder=%s`, folderName),
 					fmt.Sprintf(`--snapshot=%s-%d`, backup.Name, i),
 					"--",

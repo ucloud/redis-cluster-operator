@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -162,12 +163,12 @@ func IsDistributedRedisClusterProperly(f *Framework, drc *redisv1alpha1.Distribu
 			RenameCommandsFile: renameCommandsFile,
 			RenameCommandsPath: renameCommandsPath,
 		}
-		redisAdmin, err := NewRedisAdmin(podList.Items, password, redisconf, logger)
+		redisAdmin, err := NewRedisAdmin(podList.Items, password, redisconf, logger, drc.Spec.ClientPort)
 		if err != nil {
 			f.Logf("NewRedisAdmin err: %s", err)
 			return err
 		}
-		if _, err := redisAdmin.GetClusterInfos(); err != nil {
+		if _, err := redisAdmin.GetClusterInfos(drc.Spec.ClientPort); err != nil {
 			f.Logf("DistributedRedisCluster Cluster nodes: %s", err)
 			return err
 		}
@@ -198,10 +199,10 @@ func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string
 }
 
 // NewRedisAdmin builds and returns new redis.Admin from the list of pods
-func NewRedisAdmin(pods []corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger) (redisutil.IAdmin, error) {
+func NewRedisAdmin(pods []corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger, clientPort int) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
-		redisPort := redisutil.DefaultRedisPort
+		redisPort := strconv.Itoa(clientPort)
 		for _, container := range pod.Spec.Containers {
 			if container.Name == "redis" {
 				for _, port := range container.Ports {
@@ -367,8 +368,8 @@ func IsRedisClusterBackupProperly(f *Framework, drcb *redisv1alpha1.RedisCluster
 	}
 }
 
-func NewGoRedisClient(svc, namespaces, password string) *GoRedis {
-	addr := fmt.Sprintf("%s.%s.svc.%s:6379", svc, namespaces, os.Getenv("CLUSTER_DOMAIN"))
+func NewGoRedisClient(svc, namespaces, password string, port int) *GoRedis {
+	addr := fmt.Sprintf("%s.%s.svc.%s:%d", svc, namespaces, os.Getenv("CLUSTER_DOMAIN"), port)
 	return NewGoRedis(addr, password)
 }
 

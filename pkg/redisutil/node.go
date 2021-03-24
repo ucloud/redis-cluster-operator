@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
-
-	corev1 "k8s.io/api/core/v1"
 
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/utils"
 )
 
 const (
-	// DefaultRedisPort define the default Redis Port
-	DefaultRedisPort = "6379"
 	// RedisMasterRole redis role master
 	RedisMasterRole = "master"
 	// RedisSlaveRole redis role slave
@@ -79,24 +76,13 @@ func (n Nodes) String() string {
 }
 
 // NewDefaultNode builds and returns new defaultNode instance
-func NewDefaultNode() *Node {
+func NewDefaultNode(port int) *Node {
 	return &Node{
-		Port:           DefaultRedisPort,
+		Port:           strconv.Itoa(port),
 		Slots:          []Slot{},
 		MigratingSlots: map[Slot]string{},
 		ImportingSlots: map[Slot]string{},
 	}
-}
-
-// NewNode builds and returns new Node instance
-func NewNode(id, ip string, pod *corev1.Pod) *Node {
-	node := NewDefaultNode()
-	node.ID = id
-	node.IP = ip
-	node.PodName = pod.Name
-	node.NodeName = pod.Spec.NodeName
-
-	return node
 }
 
 // SetRole from a flags string list set the Node's role

@@ -3,6 +3,7 @@ package distributedrediscluster
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -29,10 +30,10 @@ func getLabels(cluster *redisv1alpha1.DistributedRedisCluster) map[string]string
 }
 
 // newRedisAdmin builds and returns new redis.Admin from the list of pods
-func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger) (redisutil.IAdmin, error) {
+func newRedisAdmin(pods []*corev1.Pod, password string, cfg *config.Redis, reqLogger logr.Logger, clientPort int) (redisutil.IAdmin, error) {
 	nodesAddrs := []string{}
 	for _, pod := range pods {
-		redisPort := redisutil.DefaultRedisPort
+		redisPort := strconv.Itoa(clientPort)
 		for _, container := range pod.Spec.Containers {
 			if container.Name == "redis" {
 				for _, port := range container.Ports {

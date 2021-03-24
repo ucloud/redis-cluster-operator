@@ -43,7 +43,7 @@ func (c *CheckAndHeal) FixUntrustedNodes(cluster *redisv1alpha1.DistributedRedis
 		doneAnAction = true
 		if !c.DryRun {
 			c.Logger.Info("[FixUntrustedNodes] try to forget node", "nodeId", id)
-			if err := admin.ForgetNode(id); err != nil {
+			if err := admin.ForgetNode(id,cluster.Spec.ClientPort); err != nil {
 				errs = append(errs, err)
 			}
 		}
