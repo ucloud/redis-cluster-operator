@@ -24,15 +24,12 @@ func SetClusterScoped(namespace string) {
 	}
 }
 
-func ShoudManage(meta metav1.Object) bool {
+func ShouldManage(meta metav1.Object) bool {
+	if IsClusterScoped() {
+		return true
+	}
 	if v, ok := meta.GetAnnotations()[AnnotationScope]; ok {
-		if IsClusterScoped() {
-			return v == AnnotationClusterScoped
-		}
-	} else {
-		if !IsClusterScoped() {
-			return true
-		}
+		return v == AnnotationClusterScoped
 	}
 	return false
 }

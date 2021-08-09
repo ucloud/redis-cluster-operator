@@ -103,7 +103,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.MetaNew) {
+			if !utils.ShouldManage(e.MetaNew) {
 				return false
 			}
 			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
@@ -117,7 +117,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				return false
 			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
@@ -126,7 +126,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				return false
 			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
