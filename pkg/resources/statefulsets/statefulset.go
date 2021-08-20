@@ -181,10 +181,11 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		"/conf/redis.conf",
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
+		"--cluster-announce-ip $(POD_IP)",
 	}
 	if password != nil {
-		cmd = append(cmd, fmt.Sprintf("--requirepass '$(%s)'", redisv1alpha1.PasswordENV),
-			fmt.Sprintf("--masterauth '$(%s)'", redisv1alpha1.PasswordENV))
+		cmd = append(cmd, fmt.Sprintf("--requirepass \"$(%s)\"", redisv1alpha1.PasswordENV),
+			fmt.Sprintf("--masterauth \"$(%s)\"", redisv1alpha1.PasswordENV))
 	}
 
 	renameCmdMap := utils.BuildCommandReplaceMapping(config.RedisConf().GetRenameCommandsFile(), log)
@@ -319,7 +320,7 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 		ImagePullPolicy: corev1.PullAlways,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "prom-http",
+				Name:          "http-metrics",
 				Protocol:      corev1.ProtocolTCP,
 				ContainerPort: cluster.Spec.Monitor.Prometheus.Port,
 			},

@@ -43,7 +43,13 @@ func (s *stateFulSetController) CreateStatefulSet(ss *appsv1.StatefulSet) error 
 
 // UpdateStatefulSet implement the IStatefulSetControl.Interface.
 func (s *stateFulSetController) UpdateStatefulSet(ss *appsv1.StatefulSet) error {
-	return s.client.Update(context.TODO(), ss)
+	origss, err := s.GetStatefulSet(ss.Namespace, ss.Name)
+	if err != nil {
+		return err
+	}
+	patch := client.MergeFrom(origss.DeepCopy())
+	ss.Spec.Template.DeepCopyInto(&origss.Spec.Template)
+	return s.client.Patch(context.TODO(), origss, patch)
 }
 
 // DeleteStatefulSet implement the IStatefulSetControl.Interface.

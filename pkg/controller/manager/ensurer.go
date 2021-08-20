@@ -31,6 +31,7 @@ type realEnsureResource struct {
 	svcClient         k8sutil.IServiceControl
 	configMapClient   k8sutil.IConfigMapControl
 	pdbClient         k8sutil.IPodDisruptionBudgetControl
+	pvcClient         k8sutil.IPvcControl
 	crClient          k8sutil.ICustomResource
 	client            client.Client
 	logger            logr.Logger
@@ -42,6 +43,7 @@ func NewEnsureResource(client client.Client, logger logr.Logger) IEnsureResource
 		svcClient:         k8sutil.NewServiceController(client),
 		configMapClient:   k8sutil.NewConfigMapController(client),
 		pdbClient:         k8sutil.NewPodDisruptionBudgetController(client),
+		pvcClient:         k8sutil.NewPvcController(client),
 		crClient:          k8sutil.NewCRControl(client),
 		client:            client,
 		logger:            logger,
@@ -70,6 +72,18 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 		return false, err
 	}
 
+	foundPvcs, err := r.pvcClient.ListPvcByLabels(cluster.Namespace, labels)
+	if err != nil {
+		return false, err
+	}
+	for _, pvc := range foundPvcs.Items {
+		if pvc.Spec.Resources.Requests["ResourceStorage"] != cluster.Spec.Storage.Size {
+			if err = r.pvcClient.UpdatPvcByLabels(cluster, &pvc); err != nil {
+				return false, err
+			}
+		}
+	}
+
 	ss, err := r.statefulSetClient.GetStatefulSet(cluster.Namespace, ssName)
 	if err == nil {
 		if shouldUpdateRedis(cluster, ss) {
@@ -79,6 +93,7 @@ func (r *realEnsureResource) ensureRedisStatefulset(cluster *redisv1alpha1.Distr
 			if err != nil {
 				return false, err
 			}
+
 			return true, r.statefulSetClient.UpdateStatefulSet(newSS)
 		}
 	} else if err != nil && errors.IsNotFound(err) {
@@ -290,5 +305,18 @@ func (r *realEnsureResource) updateRedisStatefulset(cluster *redisv1alpha1.Distr
 	if err != nil {
 		return err
 	}
+
+	foundPvcs, err := r.pvcClient.ListPvcByLabels(cluster.Namespace, labels)
+	if err != nil {
+		return err
+	}
+	for _, pvc := range foundPvcs.Items {
+		if pvc.Spec.Resources.Requests["ResourceStorage"] != cluster.Spec.Storage.Size {
+			if err = r.pvcClient.UpdatPvcByLabels(cluster, &pvc); err != nil {
+				return err
+			}
+		}
+	}
+
 	return r.statefulSetClient.UpdateStatefulSet(newSS)
 }
