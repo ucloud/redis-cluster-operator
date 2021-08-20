@@ -149,7 +149,8 @@ func main() {
 	if  namespace == "" {
 	  ns, err = k8sutil.GetOperatorNamespace()
 	  if err != nil {
-		 ns = "mesh"
+		  log.Info("Cannot find operator namespace", "error", err.Error() )
+		  os.Exit(1)
 	  }
 	}
 	_, err = metrics.CreateServiceMonitors(cfg, ns, services)
