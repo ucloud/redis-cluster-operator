@@ -1,13 +1,16 @@
 package manager
 
 import (
+	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	redisv1alpha1 "github.com/ucloud/redis-cluster-operator/pkg/apis/redis/v1alpha1"
 	"github.com/ucloud/redis-cluster-operator/pkg/k8sutil"
 	"github.com/ucloud/redis-cluster-operator/pkg/osm"
@@ -15,6 +18,7 @@ import (
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/poddisruptionbudgets"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/services"
 	"github.com/ucloud/redis-cluster-operator/pkg/resources/statefulsets"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 type IEnsureResource interface {
@@ -198,8 +202,35 @@ func (r *realEnsureResource) EnsureRedisSvc(cluster *redisv1alpha1.DistributedRe
 		r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
 			Info("creating a new service")
 		svc := services.NewSvcForCR(cluster, name, labels)
-		return r.svcClient.CreateService(svc)
+		err := r.svcClient.CreateService(svc)
+
+		if err == nil {
+			r.logger.WithValues("Service.Namespace", cluster.Namespace, "Service.Name", cluster.Spec.ServiceName).
+				Info("creating a new servicemonitor")
+			// Get a config to talk to the apiserver
+			cfg, err := config.GetConfig()
+			if err != nil {
+				r.logger.Error(err, "")
+				os.Exit(1)
+			}
+
+			// CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
+			// necessary to configure Prometheus to scrape metrics from this operator.
+			services := []*v1.Service{svc}
+
+			_, err = metrics.CreateServiceMonitors(cfg, cluster.Namespace, services)
+			if err != nil {
+				r.logger.Info("Could not create ServiceMonitor object", "error", err.Error())
+				// If this operator is deployed to a cluster without the prometheus-operator running, it will return
+				// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
+				if err == metrics.ErrServiceMonitorNotPresent {
+					r.logger.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
+				}
+			}
+		}
+
 	}
+
 	return err
 }
 
