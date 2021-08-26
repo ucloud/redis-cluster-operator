@@ -49,6 +49,8 @@ func (s *stateFulSetController) UpdateStatefulSet(ss *appsv1.StatefulSet) error 
 	}
 	patch := client.MergeFrom(origss.DeepCopy())
 	ss.Spec.Template.DeepCopyInto(&origss.Spec.Template)
+	origss.Spec.Replicas = ss.Spec.Replicas
+
 	return s.client.Patch(context.TODO(), origss, patch)
 }
 
