@@ -23,7 +23,7 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${GOBIN}/${PROJECT_NAME} \
     $BUILD_PATH
 
 # =============================================================================
-FROM alpine:3.9 AS final
+FROM alpine:3.15.0 AS final
 
 ARG PROJECT_NAME=redis-cluster-operator
 
