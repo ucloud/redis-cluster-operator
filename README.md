@@ -182,7 +182,7 @@ metadata:
     redis.kun/scope: cluster-scoped
   name: example-distributedrediscluster
 spec:
-  # Increase the masterSize to trigger the scaling.
+  # Decrease the masterSize to trigger the scaling.
   masterSize: 3
   ClusterReplicas: 1
   image: redis:5.0.4-alpine
