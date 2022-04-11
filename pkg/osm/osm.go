@@ -35,6 +35,7 @@ import (
 
 const (
 	SecretMountPath = "/etc/rclone"
+	CaCertFileName  = "ca.crt"
 )
 
 func CheckBucketAccess(client client.Client, spec api.Backend, namespace string) error {
