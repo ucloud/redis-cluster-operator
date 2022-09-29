@@ -72,6 +72,8 @@ spec:
               serviceName:
                 type: string
                 pattern: '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
+              image:
+                type: string
             type: object
           status:
             description: DistributedRedisClusterStatus defines the observed state of DistributedRedisCluster
