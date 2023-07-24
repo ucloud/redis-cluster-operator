@@ -19,7 +19,7 @@ metadata:
   annotations:
     redis.kun/scope: cluster-scoped
 spec:
-  image: hub.ucloudadmin.com/uaek/redis-tools:5.0.4
+  image: uhub.service.ucloud.cn/operator/redis-tools:5.0.4
   # on same namespace
   redisClusterName: test
   local:
