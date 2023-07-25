@@ -36,7 +36,7 @@ func NewSvcForCR(cluster *redisv1alpha1.DistributedRedisCluster, name string, la
 		ports = append(ports, clientPort, gossipPort)
 	} else {
 		ports = append(ports, clientPort, gossipPort,
-			corev1.ServicePort{Name: "prom-http", Port: cluster.Spec.Monitor.Prometheus.Port})
+			corev1.ServicePort{Name: "http-metrics", Port: cluster.Spec.Monitor.Prometheus.Port})
 	}
 
 	svc := &corev1.Service{
