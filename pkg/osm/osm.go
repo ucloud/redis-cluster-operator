@@ -80,69 +80,75 @@ func NewOSMContext(client client.Client, spec api.Backend, namespace string) (*o
 
 	if spec.S3 != nil {
 		nc.Provider = s3.Kind
-
 		keyID, foundKeyID := config[awsconst.AWS_ACCESS_KEY_ID]
 		key, foundKey := config[awsconst.AWS_SECRET_ACCESS_KEY]
-		if foundKey && foundKeyID {
+		if spec.S3.Endpoint == "" || spec.S3.Endpoint == "osm" {
 			nc.Config[s3.ConfigAccessKeyID] = string(keyID)
 			nc.Config[s3.ConfigSecretKey] = string(key)
 			nc.Config[s3.ConfigAuthType] = "accesskey"
+			nc.Config[s3.ConfigRegion] = spec.S3.Region
 		} else {
-			nc.Config[s3.ConfigAuthType] = "iam"
-		}
-		if spec.S3.Endpoint == "" || strings.HasSuffix(spec.S3.Endpoint, ".amazonaws.com") {
-			// Using s3 and not s3-compatible service like minio or rook, etc. Now, find region
-			var sess *session.Session
-			var err error
-			if nc.Config[s3.ConfigAuthType] == "iam" {
-				// The aws sdk does not currently support automatically setting the region based on an instances placement.
-				// This automatically sets region based on ec2 instance metadata when running on EC2.
-				// ref: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-region.html#setting-region-order-of-precedence
-				var c aws.Config
-				if s, e := session.NewSession(); e == nil {
-					if region, e := ec2metadata.New(s).Region(); e == nil {
-						c.WithRegion(region)
-					}
-				}
-				sess, err = session.NewSessionWithOptions(session.Options{
-					Config: c,
-					// Support MFA when authing using assumed roles.
-					SharedConfigState:       session.SharedConfigEnable,
-					AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
-				})
+			if foundKey && foundKeyID {
+				nc.Config[s3.ConfigAccessKeyID] = string(keyID)
+				nc.Config[s3.ConfigSecretKey] = string(key)
+				nc.Config[s3.ConfigAuthType] = "accesskey"
 			} else {
-				sess, err = session.NewSessionWithOptions(session.Options{
-					Config: aws.Config{
-						Credentials: credentials.NewStaticCredentials(string(keyID), string(key), ""),
-						Region:      aws.String("us-east-1"),
-					},
-					// Support MFA when authing using assumed roles.
-					SharedConfigState:       session.SharedConfigEnable,
-					AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
+				nc.Config[s3.ConfigAuthType] = "iam"
+			}
+			if spec.S3.Endpoint == "" || strings.HasSuffix(spec.S3.Endpoint, ".amazonaws.com") {
+				// Using s3 and not s3-compatible service like minio or rook, etc. Now, find region
+				var sess *session.Session
+				var err error
+				if nc.Config[s3.ConfigAuthType] == "iam" {
+					// The aws sdk does not currently support automatically setting the region based on an instances placement.
+					// This automatically sets region based on ec2 instance metadata when running on EC2.
+					// ref: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-region.html#setting-region-order-of-precedence
+					var c aws.Config
+					if s, e := session.NewSession(); e == nil {
+						if region, e := ec2metadata.New(s).Region(); e == nil {
+							c.WithRegion(region)
+						}
+					}
+					sess, err = session.NewSessionWithOptions(session.Options{
+						Config: c,
+						// Support MFA when authing using assumed roles.
+						SharedConfigState:       session.SharedConfigEnable,
+						AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
+					})
+				} else {
+					sess, err = session.NewSessionWithOptions(session.Options{
+						Config: aws.Config{
+							Credentials: credentials.NewStaticCredentials(string(keyID), string(key), ""),
+							Region:      aws.String("us-east-1"),
+						},
+						// Support MFA when authing using assumed roles.
+						SharedConfigState:       session.SharedConfigEnable,
+						AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
+					})
+				}
+				if err != nil {
+					return nil, err
+				}
+				svc := _s3.New(sess)
+				out, err := svc.GetBucketLocation(&_s3.GetBucketLocationInput{
+					Bucket: types.StringP(spec.S3.Bucket),
 				})
-			}
-			if err != nil {
-				return nil, err
-			}
-			svc := _s3.New(sess)
-			out, err := svc.GetBucketLocation(&_s3.GetBucketLocationInput{
-				Bucket: types.StringP(spec.S3.Bucket),
-			})
-			if err != nil {
-				return nil, err
-			}
-			nc.Config[s3.ConfigRegion] = stringz.Val(types.String(out.LocationConstraint), "us-east-1")
-		} else {
-			nc.Config[s3.ConfigEndpoint] = spec.S3.Endpoint
-			u, err := url.Parse(spec.S3.Endpoint)
-			if err != nil {
-				return nil, err
-			}
-			nc.Config[s3.ConfigDisableSSL] = strconv.FormatBool(u.Scheme == "http")
+				if err != nil {
+					return nil, err
+				}
+				nc.Config[s3.ConfigRegion] = stringz.Val(types.String(out.LocationConstraint), "us-east-1")
+			} else {
+				nc.Config[s3.ConfigEndpoint] = spec.S3.Endpoint
+				u, err := url.Parse(spec.S3.Endpoint)
+				if err != nil {
+					return nil, err
+				}
+				nc.Config[s3.ConfigDisableSSL] = strconv.FormatBool(u.Scheme == "http")
 
-			cacertData, ok := config[awsconst.CA_CERT_DATA]
-			if ok && u.Scheme == "https" {
-				nc.Config[s3.ConfigCACertData] = string(cacertData)
+				cacertData, ok := config[awsconst.CA_CERT_DATA]
+				if ok && u.Scheme == "https" {
+					nc.Config[s3.ConfigCACertData] = string(cacertData)
+				}
 			}
 		}
 		return nc, nil

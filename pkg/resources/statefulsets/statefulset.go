@@ -3,6 +3,7 @@ package statefulsets
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -70,6 +71,7 @@ func NewStatefulSetForCR(cluster *redisv1alpha1.DistributedRedisCluster, ssName,
 						redisServerContainer(cluster, password),
 					},
 					Volumes: volumes,
+					HostNetwork:       spec.HostNetwork,
 				},
 			},
 		},
@@ -179,6 +181,7 @@ func getRedisCommand(cluster *redisv1alpha1.DistributedRedisCluster, password *c
 		"/conf/fix-ip.sh",
 		"redis-server",
 		"/conf/redis.conf",
+		"--port " + strconv.Itoa(cluster.Spec.ClientPort),
 		"--cluster-enabled yes",
 		"--cluster-config-file /data/nodes.conf",
 	}
@@ -225,8 +228,22 @@ func mergeRenameCmds(userCmds []string, systemRenameCmdMap map[string]string) []
 	return cmds
 }
 
+func createContainerPort(name string, port int32, hostNetwork bool) corev1.ContainerPort {
+	var containerPort = corev1.ContainerPort{
+		Name:          name,
+		ContainerPort: port,
+		Protocol:      corev1.ProtocolTCP,
+	}
+
+	if hostNetwork {
+		containerPort.HostPort = port
+	}
+
+	return containerPort
+}
+
 func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, password *corev1.EnvVar) corev1.Container {
-	probeArg := "redis-cli -h $(hostname) ping"
+	probeArg := "redis-cli -h $(hostname) -p " + strconv.Itoa(cluster.Spec.ClientPort) + " ping"
 
 	container := corev1.Container{
 		Name:            redisServerName,
@@ -234,16 +251,8 @@ func redisServerContainer(cluster *redisv1alpha1.DistributedRedisCluster, passwo
 		ImagePullPolicy: cluster.Spec.ImagePullPolicy,
 		SecurityContext: cluster.Spec.ContainerSecurityContext,
 		Ports: []corev1.ContainerPort{
-			{
-				Name:          "client",
-				ContainerPort: 6379,
-				Protocol:      corev1.ProtocolTCP,
-			},
-			{
-				Name:          "gossip",
-				ContainerPort: 16379,
-				Protocol:      corev1.ProtocolTCP,
-			},
+			createContainerPort("client", int32(cluster.Spec.ClientPort), cluster.Spec.HostNetwork),
+			createContainerPort("gossip", int32(cluster.Spec.GossipPort), cluster.Spec.HostNetwork),
 		},
 		VolumeMounts: volumeMounts(),
 		Command:      getRedisCommand(cluster, password),
@@ -317,12 +326,9 @@ func redisExporterContainer(cluster *redisv1alpha1.DistributedRedisCluster, pass
 		}, cluster.Spec.Monitor.Args...),
 		Image:           cluster.Spec.Monitor.Image,
 		ImagePullPolicy: corev1.PullAlways,
+
 		Ports: []corev1.ContainerPort{
-			{
-				Name:          "prom-http",
-				Protocol:      corev1.ProtocolTCP,
-				ContainerPort: cluster.Spec.Monitor.Prometheus.Port,
-			},
+			createContainerPort("prom-http", cluster.Spec.Monitor.Prometheus.Port, cluster.Spec.HostNetwork),
 		},
 		Env:             cluster.Spec.Monitor.Env,
 		Resources:       cluster.Spec.Monitor.Resources,

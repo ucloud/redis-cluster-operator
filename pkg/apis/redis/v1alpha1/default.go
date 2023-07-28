@@ -16,12 +16,23 @@ const (
 	minClusterReplicas  = 1
 	defaultRedisImage   = "redis:5.0.4-alpine"
 	defaultMonitorImage = "oliver006/redis_exporter:latest"
+	defaultClientPort   = 6379
 )
 
 func (in *DistributedRedisCluster) DefaultSpec(log logr.Logger) bool {
 	update := false
 	if in.Spec.MasterSize < minMasterSize {
 		in.Spec.MasterSize = minMasterSize
+		update = true
+	}
+
+	if in.Spec.ClientPort == 0 {
+		in.Spec.ClientPort = defaultClientPort
+		update = true
+	}
+
+	if in.Spec.GossipPort != (in.Spec.ClientPort + 10000) {
+		in.Spec.GossipPort = in.Spec.ClientPort + 10000
 		update = true
 	}
 

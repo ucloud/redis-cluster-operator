@@ -38,9 +38,9 @@ type ClusterInfos struct {
 }
 
 // NewNodeInfos returns an instance of NodeInfo
-func NewNodeInfos() *NodeInfos {
+func NewNodeInfos(port int) *NodeInfos {
 	return &NodeInfos{
-		Node:    NewDefaultNode(),
+		Node:    NewDefaultNode(port),
 		Friends: Nodes{},
 	}
 }
@@ -72,8 +72,8 @@ func DecodeNodeStartTime(input *string, log logr.Logger) (time.Time, error) {
 }
 
 // DecodeNodeInfos decode from the cmd output the Redis nodes info. Second argument is the node on which we are connected to request info
-func DecodeNodeInfos(input *string, addr string, log logr.Logger) *NodeInfos {
-	infos := NewNodeInfos()
+func DecodeNodeInfos(input *string, addr string, log logr.Logger, port int) *NodeInfos {
+	infos := NewNodeInfos(port)
 	lines := strings.Split(*input, "\n")
 	for _, line := range lines {
 		values := strings.Split(line, " ")
@@ -82,7 +82,7 @@ func DecodeNodeInfos(input *string, addr string, log logr.Logger) *NodeInfos {
 			log.V(7).Info(fmt.Sprintf("not enough values in line split, ignoring line: '%s'", line))
 			continue
 		} else {
-			node := NewDefaultNode()
+			node := NewDefaultNode(port)
 
 			node.ID = values[0]
 			//remove trailing port for cluster internal protocol
