@@ -75,7 +75,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	pred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.MetaNew) {
+			if !utils.ShouldManage(e.MetaNew) {
 				return false
 			}
 			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(5).Info("Call UpdateFunc")
@@ -89,7 +89,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				return false
 			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call DeleteFunc")
@@ -98,7 +98,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			// returns false if DistributedRedisCluster is ignored (not managed) by this operator.
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				return false
 			}
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).Info("Call CreateFunc")
@@ -115,7 +115,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	jobPred := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Call Job UpdateFunc")
-			if !utils.ShoudManage(e.MetaNew) {
+			if !utils.ShouldManage(e.MetaNew) {
 				log.WithValues("namespace", e.MetaNew.GetNamespace(), "name", e.MetaNew.GetName()).V(4).Info("Job UpdateFunc Not Manage")
 				return false
 			}
@@ -126,7 +126,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				return false
 			}
 			job, ok := e.Object.(*batch.Job)
@@ -141,7 +141,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Call Job CreateFunc")
-			if !utils.ShoudManage(e.Meta) {
+			if !utils.ShouldManage(e.Meta) {
 				log.WithValues("namespace", e.Meta.GetNamespace(), "name", e.Meta.GetName()).V(4).Info("Job CreateFunc Not Manage")
 				return false
 			}
