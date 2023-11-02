@@ -4,7 +4,7 @@ require (
 	github.com/appscode/go v0.0.0-20191006073906-e3d193d493fc
 	github.com/appscode/osm v0.12.0
 	github.com/aws/aws-sdk-go v1.20.20
-	github.com/go-logr/logr v0.1.0
+	github.com/go-logr/logr v1.2.4
 	github.com/go-openapi/spec v0.19.2
 	github.com/go-redis/redis v6.15.7+incompatible
 	github.com/mediocregopher/radix.v2 v0.0.0-20181115013041-b67df6e626f9
@@ -14,10 +14,11 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/satori/go.uuid v1.2.0
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/sync v0.1.0
 	gomodules.xyz/stow v0.2.3
+	k8s.io-new/api v0.0.0-00010101000000-000000000000
 	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
+	k8s.io/apimachinery v0.28.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.16.2
@@ -50,6 +51,9 @@ replace (
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9
 )
+
+// Pinned to kubernetes-1.22
+replace k8s.io-new/api => k8s.io/api v0.26.7
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.1+incompatible
